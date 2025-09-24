@@ -140,7 +140,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="admin-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -188,6 +188,23 @@ export default function AdminDashboard() {
           <CardContent>
             <Button asChild variant="outline" className="w-full">
               <Link href="/admin/units">Manage Units</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="admin-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Document Analytics
+            </CardTitle>
+            <CardDescription>
+              View detailed analytics and insights for documents
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/admin/documents/analytics">View Analytics</Link>
             </Button>
           </CardContent>
         </Card>

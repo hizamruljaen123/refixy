@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, permission_ids } = body
+    const { name, description, permission_codes } = body
 
     // Validate required fields
     if (!name) {
@@ -99,11 +99,18 @@ export async function POST(request: NextRequest) {
     })
 
     // Assign permissions if provided
-    if (permission_ids && permission_ids.length > 0) {
+    if (permission_codes && permission_codes.length > 0) {
+      // Get permission IDs from codes
+      const permissions = await db.permission.findMany({
+        where: {
+          code: { in: permission_codes }
+        }
+      })
+
       await db.rolePermission.createMany({
-        data: permission_ids.map((permissionId: string) => ({
+        data: permissions.map(permission => ({
           role_id: role.id,
-          permission_id: permissionId
+          permission_id: permission.id
         }))
       })
     }
