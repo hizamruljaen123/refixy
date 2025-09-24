@@ -1,0 +1,456 @@
+siap, Hizam! di bawah ini proposal/blueprint lengkap (teknis + bisnis) untuk aplikasi **Manajemen Dokumen Instansi** dengan fokus MVP berbasis **SQLite** dulu, tapi mudah dimigrasi ke DB lain. Aku pakai bahasa campuran santai-teknis biar enak dibaca.
+
+# 1) Ringkasan Eksekutif
+
+Aplikasi manajemen dokumen (DMS) untuk instansi yang:
+
+* Memisahkan dokumen **publik** vs **terbatas** (akses tertentu).
+* Punya **level akses per dokumen** (RBAC + kondisi tambahan).
+* CRUD dokumen + **riwayat revisi** versi lengkap.
+* **Timeline dokumen** (create, review, approve, publish, archive).
+* Audit trail, notifikasi, pencarian, tagging, dan persetujuan (optional) per unit kerja.
+
+Target awal: web app (SPA + REST API). DB: **SQLite** (MVP), lalu migrasi mudah ke PostgreSQL/MySQL.
+
+# 2) Alur Bisnis (High-Level)
+
+1. **Unggah/Registrasi Dokumen**
+
+   * User buat entri dokumen (judul, ringkasan, kategori, tag, unit kerja, visibilitas).
+   * Upload berkas (PDF/Docx). Sistem otomatis buat **Version 1.0**.
+
+2. **Review & Revisi**
+
+   * Reviewer/commenter memberikan catatan.
+   * Editor mengunggah revisi => buat **Version 1.1/2.0** (skema ver. di bawah).
+   * Semua revisi tersimpan + diff (opsional untuk teks).
+
+3. **Persetujuan (opsional tergantung kategori)**
+
+   * Approver menyetujui/menolak.
+   * Jika disetujui => status jadi **Published** (kalau visibilitas publik) atau **Active** (internal).
+
+4. **Distribusi & Akses**
+
+   * Pengguna mengakses sesuai perannya/ACL (lihat model akses).
+
+5. **Perubahan Status & Retensi**
+
+   * Dokumen bisa di-**retire/archive** setelah masa berlaku atau kebijakan retensi.
+   * Seluruh kejadian tercatat di **Timeline**.
+
+# 3) Peran & Model Akses
+
+* **Admin Sistem**: kelola user, role, unit, kebijakan, semua dokumen.
+* **Owner/Editor**: buat & edit dokumen pada unitnya.
+* **Reviewer/Approver**: memberi review/approval sesuai kebijakan kategori/unit.
+* **Viewer Internal**: baca dokumen internal yang diizinkan.
+* **Publik**: hanya dokumen berstatus Published & visibilitas publik.
+
+**Model Akses (RBAC + ABAC ringan)**
+
+1. RBAC: role → permissions (CREATE\_DOCUMENT, READ\_INTERNAL, APPROVE, MANAGE\_USERS, dll).
+2. ABAC: aturan tambahan per dokumen:
+
+   * `visibility`: PUBLIC | INTERNAL | RESTRICTED
+   * `unit_scope`: dokumen milik unit X, hanya role di unit X.
+   * `custom_acl`: daftar user/role yang di-allow/deny.
+   * `classification`: LOW | MEDIUM | HIGH (membatasi share/unduh).
+
+Evaluasi izin = RBAC ∧ (visibility & unit & ACL & classification).
+
+# 4) Status & Workflow Dokumen
+
+* **Draft** → **InReview** → **Approved** → **Published** (publik) atau **Active** (internal) → **Archived** → **Retired**.
+* Transisi memicu event timeline + notifikasi.
+
+# 5) Fitur Inti (MVP)
+
+* CRUD dokumen + versi/revisi otomatis.
+* Upload multi-format, metadata lengkap, tagging.
+* Pencarian cepat (judul, ringkasan, tag, nomor dokumen) + **FTS5** untuk konten teks.
+* Timeline per dokumen (event + siapa + kapan).
+* Audit log (aksi user).
+* Notifikasi (email/in-app) untuk review/approval/perubahan status.
+* Ekspor metadata + lampiran (zip).
+* Kebijakan retensi (tanggal kadaluarsa/peninjauan ulang).
+
+# 6) Non-Fungsional
+
+* Keamanan: hashing password (Argon2/BCrypt), JWT/Session, rate limit, CSRF, validasi file (mime, ukuran), antivirus (opsional).
+* Integritas: versi immutable; audit append-only.
+* Kinerja: index penting; gunakan FTS5 untuk search.
+* Skalabilitas: desain portable ke PostgreSQL; simpan file di disk/S3-compatible.
+* Kepatuhan: jejak audit, retensi, kontrol akses, watermark (opsional).
+
+# 7) Skema Data (SQLite – detail)
+
+> Catatan: gunakan `STRICT` tables jika SQLite ≥ 3.37. Tipe: TEXT/INTEGER/REAL/BLOB.
+
+```sql
+-- USERS & AUTH
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE roles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL, -- admin, editor, reviewer, approver, viewer
+  description TEXT
+);
+
+CREATE TABLE user_roles (
+  user_id INTEGER NOT NULL,
+  role_id INTEGER NOT NULL,
+  unit_id INTEGER,
+  PRIMARY KEY(user_id, role_id, unit_id),
+  FOREIGN KEY(user_id) REFERENCES users(id),
+  FOREIGN KEY(role_id) REFERENCES roles(id),
+  FOREIGN KEY(unit_id) REFERENCES units(id)
+);
+
+CREATE TABLE permissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL, -- e.g. DOC_CREATE, DOC_READ, DOC_APPROVE
+  description TEXT
+);
+
+CREATE TABLE role_permissions (
+  role_id INTEGER NOT NULL,
+  permission_id INTEGER NOT NULL,
+  PRIMARY KEY(role_id, permission_id),
+  FOREIGN KEY(role_id) REFERENCES roles(id),
+  FOREIGN KEY(permission_id) REFERENCES permissions(id)
+);
+
+-- ORGANIZATIONAL UNITS
+CREATE TABLE units (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL
+);
+
+-- DOCUMENT MASTER
+CREATE TABLE documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_number TEXT,                     -- nomor dokumen opsional
+  title TEXT NOT NULL,
+  summary TEXT,
+  category TEXT,                        -- kebijakan, SOP, laporan, dll
+  classification TEXT NOT NULL DEFAULT 'LOW', -- LOW/MEDIUM/HIGH
+  visibility TEXT NOT NULL DEFAULT 'INTERNAL', -- PUBLIC/INTERNAL/RESTRICTED
+  status TEXT NOT NULL DEFAULT 'Draft', -- Draft/InReview/Approved/Published/Active/Archived/Retired
+  unit_id INTEGER NOT NULL,             -- unit pemilik
+  owner_user_id INTEGER NOT NULL,       -- pembuat
+  current_version_id INTEGER,           -- pointer ke versi aktif/terbaru
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  effective_date TEXT,                  -- tanggal berlaku
+  expiry_date TEXT,                     -- untuk retensi/kadaluarsa
+  FOREIGN KEY(unit_id) REFERENCES units(id),
+  FOREIGN KEY(owner_user_id) REFERENCES users(id)
+);
+
+-- DOCUMENT VERSIONING
+CREATE TABLE document_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL,
+  version_label TEXT NOT NULL,          -- e.g. 1.0, 1.1, 2.0
+  change_type TEXT NOT NULL,            -- MAJOR/MINOR
+  change_log TEXT,                      -- ringkasan perubahan
+  file_path TEXT,                       -- path di storage
+  file_hash TEXT,                       -- checksum (SHA-256)
+  file_mime TEXT,
+  file_size INTEGER,
+  created_by INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  is_published INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(created_by) REFERENCES users(id)
+);
+
+-- OPTIONAL: konten teks diekstrak (untuk FTS)
+CREATE TABLE document_texts (
+  version_id INTEGER PRIMARY KEY,
+  content TEXT,
+  FOREIGN KEY(version_id) REFERENCES document_versions(id)
+);
+
+-- FULL TEXT SEARCH (FTS5)
+CREATE VIRTUAL TABLE document_texts_fts USING fts5(
+  content, content='document_texts', content_rowid='version_id'
+);
+
+-- TRIGGER sinkronisasi FTS
+CREATE TRIGGER document_texts_ai AFTER INSERT ON document_texts BEGIN
+  INSERT INTO document_texts_fts(rowid, content)
+  VALUES (new.version_id, new.content);
+END;
+CREATE TRIGGER document_texts_ad AFTER DELETE ON document_texts BEGIN
+  INSERT INTO document_texts_fts(document_texts_fts, rowid, content)
+  VALUES ('delete', old.version_id, old.content);
+END;
+CREATE TRIGGER document_texts_au AFTER UPDATE ON document_texts BEGIN
+  INSERT INTO document_texts_fts(document_texts_fts, rowid, content)
+  VALUES ('delete', old.version_id, old.content);
+  INSERT INTO document_texts_fts(rowid, content)
+  VALUES (new.version_id, new.content);
+END;
+
+-- TAGS
+CREATE TABLE tags (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL
+);
+CREATE TABLE document_tags (
+  document_id INTEGER NOT NULL,
+  tag_id INTEGER NOT NULL,
+  PRIMARY KEY(document_id, tag_id),
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(tag_id) REFERENCES tags(id)
+);
+
+-- CUSTOM ACL (tambahan di luar visibility)
+CREATE TABLE document_acl (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL,
+  subject_type TEXT NOT NULL, -- USER/ROLE/UNIT
+  subject_id INTEGER NOT NULL,
+  access TEXT NOT NULL,       -- READ/WRITE/APPROVE/DENY
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(document_id) REFERENCES documents(id)
+);
+
+-- TIMELINE & AUDIT
+CREATE TABLE document_timeline (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL,
+  version_id INTEGER,
+  event_type TEXT NOT NULL,   -- CREATED/UPLOADED/REVIEW_REQUESTED/APPROVED/PUBLISHED/ARCHIVED/EXPIRED/REPLACED
+  actor_user_id INTEGER NOT NULL,
+  event_at TEXT NOT NULL,
+  notes TEXT,
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(version_id) REFERENCES document_versions(id),
+  FOREIGN KEY(actor_user_id) REFERENCES users(id)
+);
+
+CREATE TABLE audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_user_id INTEGER,
+  action TEXT NOT NULL,       -- LOGIN, DOC_READ, DOC_DOWNLOAD, DOC_UPDATE, etc
+  resource_type TEXT,
+  resource_id INTEGER,
+  at TEXT NOT NULL,
+  meta TEXT                   -- JSON string
+);
+
+-- COMMENTS/REVIEW NOTES
+CREATE TABLE comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id INTEGER NOT NULL,
+  version_id INTEGER,
+  author_user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(document_id) REFERENCES documents(id),
+  FOREIGN KEY(version_id) REFERENCES document_versions(id),
+  FOREIGN KEY(author_user_id) REFERENCES users(id)
+);
+
+-- NOTIFICATIONS (queue sederhana)
+CREATE TABLE notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  type TEXT NOT NULL,         -- REVIEW_REQUEST, APPROVAL_RESULT, STATUS_CHANGE, etc
+  payload TEXT,               -- JSON
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
+-- INDEXES penting
+CREATE INDEX idx_documents_unit ON documents(unit_id);
+CREATE INDEX idx_documents_visibility ON documents(visibility);
+CREATE INDEX idx_documents_status ON documents(status);
+CREATE INDEX idx_docver_doc ON document_versions(document_id);
+CREATE INDEX idx_acl_doc ON document_acl(document_id);
+CREATE INDEX idx_timeline_doc ON document_timeline(document_id);
+CREATE INDEX idx_comments_doc ON comments(document_id);
+```
+
+## Skema Versi & Revisi
+
+* **MINOR**: perubahan kecil (typo, format) → naik `x.y+1` (1.0 → 1.1).
+* **MAJOR**: perubahan kebijakan/substansi → naik `x+1.0` (1.3 → 2.0).
+* Setiap unggah file baru = tambah baris `document_versions` + event timeline.
+
+## Timeline Dokumen
+
+Contoh event:
+
+* CREATED (doc dibuat), UPLOADED (versi baru), IN\_REVIEW, APPROVED, PUBLISHED/ACTIVE, EXPIRED, ARCHIVED, REPLACED (oleh versi mayor baru).
+
+# 8) Flow Teknis (Ringkas)
+
+**Create Document**
+
+1. Cek izin (DOC\_CREATE).
+2. Insert `documents` (status Draft).
+3. Upload file → buat `document_versions` (1.0).
+4. Update `documents.current_version_id`.
+5. Insert timeline CREATED/UPLOADED.
+6. Notifikasi reviewer (jika perlu).
+
+**Update/Revisi**
+
+1. Cek WRITE/owner/editor.
+2. Tentukan MAJOR/MINOR → hitung `version_label`.
+3. Insert `document_versions` + `document_texts` (FTS).
+4. Update pointer `current_version_id`.
+5. Insert timeline UPLOADED/IN\_REVIEW.
+
+**Approval**
+
+1. Cek APPROVE + policy kategori/unit.
+2. Update `documents.status` → Approved; jika publik → Published.
+3. Insert timeline APPROVED/PUBLISHED; kirim notifikasi.
+
+**Akses Baca**
+
+1. Evaluasi: role & unit & ACL & visibility & classification.
+2. Catat audit DOC\_READ/DOC\_DOWNLOAD.
+
+# 9) Pencarian
+
+* Metadata: `WHERE title LIKE ? OR doc_number LIKE ? OR EXISTS (SELECT … tag)`
+* Full-text konten:
+
+  ```sql
+  SELECT d.id, d.title, dv.version_label
+  FROM document_texts_fts f
+  JOIN document_versions dv ON dv.id = f.rowid
+  JOIN documents d ON d.id = dv.document_id
+  WHERE document_texts_fts MATCH ?         -- kueri FTS5
+  ORDER BY rank;
+  ```
+
+# 10) API (Draft REST)
+
+* **Auth**
+
+  * `POST /auth/login` → token/session
+* **Dokumen**
+
+  * `POST /documents` (metadata)
+  * `POST /documents/{id}/versions` (upload file, change\_log, MAJOR/MINOR)
+  * `GET /documents?query=&tag=&status=&visibility=`
+  * `GET /documents/{id}` (detail + current\_version)
+  * `GET /documents/{id}/timeline`
+  * `GET /documents/{id}/versions` + `GET /versions/{versionId}/download`
+  * `PATCH /documents/{id}` (metadata)
+  * `PATCH /documents/{id}/status` (review/approve/publish/archive)
+* **Komentar/Review**
+
+  * `POST /documents/{id}/comments`
+  * `GET /documents/{id}/comments`
+* **Admin**
+
+  * `POST /users` / `PATCH /users/{id}` / `GET /users`
+  * `POST /roles` / `POST /role-permissions`
+  * `POST /document-acl`
+
+# 11) Kebijakan Retensi & Arsip
+
+* Field `expiry_date`.
+* Job harian: set status **Archived** saat lewat `expiry_date`.
+* Event timeline EXPIRED/ARCHIVED + notifikasi owner untuk perpanjangan.
+
+# 12) Strategi Penyimpanan File
+
+* MVP: simpan di filesystem (`/storage/docs/{documentId}/{versionLabel}/file.ext`), taruh `file_path` + `file_hash`.
+* Production: pindah ke S3/MinIO; tetap catat path & hash.
+* Validasi mime, ukuran max, scanning virus (opsional).
+
+# 13) Migrasi ke PostgreSQL/MySQL
+
+* Hindari fitur SQLite spesifik kecuali FTS (nanti diganti PG tsvector/PGroonga).
+* Buat lapisan repository + migrasi via tool (Flyway/Liquibase).
+* UUID (opsional) untuk id portabilitas.
+* Ganti `TEXT` timestamp → `TIMESTAMPTZ` di PG.
+
+# 14) Wireframe (singkat)
+
+* **Dashboard**: filter (status, unit, kategori), daftar dokumen, badge visibilitas.
+* **Detail Dokumen**: metadata, versi (download), timeline, komentar, ACL tab.
+* **Editor Versi**: upload revisi + changelog + pilih MAJOR/MINOR.
+* **Admin**: user/role/permission, unit, tag, kebijakan.
+
+# 15) Notifikasi
+
+* Event-driven sederhana: insert ke `notifications`, worker kirim email/in-app.
+* Templat: Review Request, Approval Result, Status Change, Expiry Reminder (T-30/T-7 hari).
+
+# 16) Pengujian & Kriteria Penerimaan (contoh)
+
+* **Akses**: user unit A tidak bisa baca RESTRICTED unit B (403).
+* **Versi**: upload minor → label meningkat (1.0 → 1.1).
+* **Timeline**: setiap aksi besar memunculkan event.
+* **Search**: FTS menemukan dokumen dari isi file yang diekstrak.
+* **Audit**: baca/unduh tercatat.
+
+
+# 18) Contoh Query Penting
+
+**Cek akses cepat (public)**
+
+```sql
+SELECT 1
+FROM documents d
+LEFT JOIN document_acl a ON a.document_id = d.id
+WHERE d.id = ? 
+  AND (d.visibility = 'PUBLIC');
+```
+
+**Ambil versi terbaru + metadata**
+
+```sql
+SELECT d.*, dv.id AS version_id, dv.version_label, dv.file_path
+FROM documents d
+LEFT JOIN document_versions dv ON dv.id = d.current_version_id
+WHERE d.id = ?;
+```
+
+**Ambil timeline terurut**
+
+```sql
+SELECT * FROM document_timeline 
+WHERE document_id = ? ORDER BY event_at ASC;
+```
+
+# 19) Risiko & Mitigasi
+
+* **File besar** → chunked upload, limit ukuran.
+* **Kolusi approval** → minimal dua approver untuk kategori HIGH.
+* **Leak internal** → watermark download, deny forward (kebijakan), audit ketat.
+* **Kualitas pencarian** → normalisasi teks, stemming (nanti saat migrasi PG).
+* **Konsistensi versi** → semua create/update versi via satu service layer (transaksi).
+
+# 20) Lampiran: Aturan Versi Otomatis (pseudologik)
+
+* Jika form revisi pilih **MINOR** → `next = major.current + "." + (minor.current+1)`
+* Jika **MAJOR** → `next = (major.current+1) + ".0"`
+
+---
+
+Kalau kamu mau, aku bisa lanjutkan dengan:
+
+* script **seed** (roles/permissions default, admin awal),
+* contoh endpoint Express/FastAPI,
+* atau generator **DDL** + contoh data uji.

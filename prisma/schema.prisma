@@ -1,0 +1,325 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// USERS & AUTH
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  full_name     String
+  password_hash String
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  user_roles      UserRole[]
+  owned_documents Document[] @relation("DocumentOwner")
+  document_versions DocumentVersion[]
+  timeline_events  DocumentTimeline[]
+  audit_logs       AuditLog[]
+  comments         Comment[]
+  notifications    Notification[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+
+  // Relations
+  user_roles      UserRole[]
+  role_permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  user_id  String
+  role_id  String
+  unit_id  String? // Make this optional and not part of the primary key
+  
+  user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role  Role  @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  unit  Unit?  @relation(fields: [unit_id], references: [id])
+
+  @@id([user_id, role_id])
+  @@unique([user_id, role_id, unit_id]) // Ensure uniqueness with optional unit_id
+  @@map("user_roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique // e.g. DOC_CREATE, DOC_READ, DOC_APPROVE
+  description String?
+
+  // Relations
+  role_permissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  role_id       String
+  permission_id String
+  
+  role       Role       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+// ORGANIZATIONAL UNITS
+model Unit {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  // Relations
+  user_roles     UserRole[]
+  documents      Document[]
+  document_acls  DocumentACL[]
+
+  @@map("units")
+}
+
+// DOCUMENT MASTER
+model Document {
+  id                 String            @id @default(cuid())
+  doc_number         String?           // nomor dokumen opsional
+  title              String
+  summary            String?
+  category           String?           // kebijakan, SOP, laporan, dll
+  classification     DocumentClassification @default(LOW) // LOW/MEDIUM/HIGH
+  visibility         DocumentVisibility @default(INTERNAL) // PUBLIC/INTERNAL/RESTRICTED
+  status             DocumentStatus    @default(DRAFT) // DRAFT/IN_REVIEW/APPROVED/PUBLISHED/ACTIVE/ARCHIVED/RETIRED
+  unit_id            String
+  owner_user_id      String
+  current_version_id String? @unique
+  created_at         DateTime          @default(now())
+  updated_at         DateTime          @updatedAt
+  effective_date     DateTime?
+  expiry_date        DateTime?         // untuk retensi/kadaluarsa
+
+  // Relations
+  unit              Unit               @relation(fields: [unit_id], references: [id])
+  owner             User               @relation("DocumentOwner", fields: [owner_user_id], references: [id])
+  current_version   DocumentVersion?   @relation("DocumentCurrentVersion", fields: [current_version_id], references: [id])
+  versions          DocumentVersion[]
+  tags              DocumentTag[]
+  acls              DocumentACL[]
+  timeline_events   DocumentTimeline[]
+  comments          Comment[]
+
+  @@map("documents")
+}
+
+// DOCUMENT VERSIONING
+model DocumentVersion {
+  id           String           @id @default(cuid())
+  document_id  String
+  version_label String          // e.g. 1.0, 1.1, 2.0
+  change_type  VersionChangeType // MAJOR/MINOR
+  change_log   String?          // ringkasan perubahan
+  file_path    String           // path di storage
+  file_hash    String           // checksum (SHA-256)
+  file_mime    String?
+  file_size    Int?
+  created_by   String
+  created_at   DateTime         @default(now())
+  is_published Boolean          @default(false)
+
+  // Relations
+  document        Document       @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  creator         User           @relation(fields: [created_by], references: [id])
+  text_content    DocumentText?
+  current_document Document?      @relation("DocumentCurrentVersion")
+  timeline_events DocumentTimeline[]
+  comments        Comment[]
+
+  @@map("document_versions")
+}
+
+// OPTIONAL: konten teks diekstrak (untuk FTS)
+model DocumentText {
+  version_id String @id
+  content    String
+
+  // Relations
+  version DocumentVersion @relation(fields: [version_id], references: [id], onDelete: Cascade)
+
+  @@map("document_texts")
+}
+
+// TAGS
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  // Relations
+  document_tags DocumentTag[]
+
+  @@map("tags")
+}
+
+model DocumentTag {
+  document_id String
+  tag_id      String
+  
+  document Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([document_id, tag_id])
+  @@map("document_tags")
+}
+
+// CUSTOM ACL (tambahan di luar visibility)
+model DocumentACL {
+  id           String           @id @default(cuid())
+  document_id  String
+  subject_type ACLSubjectType   // USER/ROLE/UNIT
+  subject_id   String
+  access       ACLAccess        // READ/WRITE/APPROVE/DENY
+  created_at   DateTime         @default(now())
+
+  // Relations
+  document Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [subject_id], references: [id])
+
+  @@map("document_acls")
+}
+
+// TIMELINE & AUDIT
+model DocumentTimeline {
+  id           String           @id @default(cuid())
+  document_id  String
+  version_id   String?
+  event_type   TimelineEventType // CREATED/UPLOADED/REVIEW_REQUESTED/APPROVED/PUBLISHED/ARCHIVED/EXPIRED/REPLACED
+  actor_user_id String
+  event_at     DateTime         @default(now())
+  notes        String?
+
+  // Relations
+  document Document         @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  version  DocumentVersion? @relation(fields: [version_id], references: [id])
+  actor    User             @relation(fields: [actor_user_id], references: [id])
+
+  @@map("document_timeline")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actor_user_id String?
+  action        String   // LOGIN, DOC_READ, DOC_DOWNLOAD, DOC_UPDATE, etc
+  resource_type String?
+  resource_id   String?
+  at            DateTime @default(now())
+  meta          String?  // JSON string
+
+  // Relations
+  actor User? @relation(fields: [actor_user_id], references: [id])
+
+  @@map("audit_logs")
+}
+
+// COMMENTS/REVIEW NOTES
+model Comment {
+  id            String   @id @default(cuid())
+  document_id   String
+  version_id    String?
+  author_user_id String
+  content       String
+  created_at    DateTime @default(now())
+
+  // Relations
+  document Document         @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  version  DocumentVersion? @relation(fields: [version_id], references: [id])
+  author   User             @relation(fields: [author_user_id], references: [id])
+
+  @@map("comments")
+}
+
+// NOTIFICATIONS (queue sederhana)
+model Notification {
+  id        String           @id @default(cuid())
+  user_id   String
+  type      NotificationType // REVIEW_REQUEST, APPROVAL_RESULT, STATUS_CHANGE, etc
+  payload   String?          // JSON
+  is_read   Boolean          @default(false)
+  created_at DateTime         @default(now())
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ENUMS
+enum DocumentClassification {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DocumentVisibility {
+  PUBLIC
+  INTERNAL
+  RESTRICTED
+}
+
+enum DocumentStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ACTIVE
+  ARCHIVED
+  RETIRED
+}
+
+enum VersionChangeType {
+  MAJOR
+  MINOR
+}
+
+enum ACLSubjectType {
+  USER
+  ROLE
+  UNIT
+}
+
+enum ACLAccess {
+  READ
+  WRITE
+  APPROVE
+  DENY
+}
+
+enum TimelineEventType {
+  CREATED
+  UPLOADED
+  REVIEW_REQUESTED
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+  EXPIRED
+  REPLACED
+}
+
+enum NotificationType {
+  REVIEW_REQUEST
+  APPROVAL_RESULT
+  STATUS_CHANGE
+  EXPIRY_REMINDER
+}
