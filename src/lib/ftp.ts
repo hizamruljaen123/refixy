@@ -5,6 +5,7 @@ export interface FTPConfig {
   port: number
   user: string
   password: string
+  secure?: boolean // For SSL/TLS connections
 }
 
 export class FTPUploader {
@@ -16,33 +17,35 @@ export class FTPUploader {
 
   async uploadFile(localPath: string, remotePath: string): Promise<string> {
     const client = new Client()
-    client.ftp.verbose = false
-
     try {
       await client.access({
         host: this.config.host,
         port: this.config.port,
         user: this.config.user,
         password: this.config.password,
-        secure: false
+        secure: this.config.secure || false
       })
 
-      // Create remote directory if needed
+      // Create remote directory if it doesn't exist
       const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
       if (remoteDir) {
-        await client.ensureDir(remoteDir)
+        try {
+          await client.ensureDir(remoteDir)
+        } catch (dirError) {
+          console.warn('Could not create remote directory:', dirError)
+        }
       }
 
       // Upload file
       await client.uploadFrom(localPath, remotePath)
 
-      // Generate public URL (assuming FTP server serves files via HTTP)
-      const publicUrl = `https://assetacademy.id/files/${remotePath}`
-
+      // Return the public URL
+      const publicUrl = `https://${this.config.host}/files/${remotePath}`
       return publicUrl
+
     } catch (error) {
-      console.error('FTP upload error:', error)
-      throw new Error(`Failed to upload file to FTP: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('FTP upload failed:', error)
+      throw error
     } finally {
       client.close()
     }
@@ -56,7 +59,7 @@ export class FTPUploader {
         port: this.config.port,
         user: this.config.user,
         password: this.config.password,
-        secure: false
+        secure: this.config.secure || false
       })
       return true
     } catch (error) {
@@ -68,12 +71,13 @@ export class FTPUploader {
   }
 }
 
-// Default FTP config
+// Default FTP config - Now using Web Disk
 export const ftpConfig: FTPConfig = {
-  host: 'ftp.assetacademy.id',
-  port: 21,
-  user: 'files@assetacademy.id',
-  password: 'komputer123@@'
+  host: 'assetacademy.id',
+  port: 2078,
+  user: 'aksesdata@assetacademy.id',
+  password: 'komputer123@@',
+  secure: true // SSL Enabled
 }
 
 export const ftpUploader = new FTPUploader(ftpConfig)
