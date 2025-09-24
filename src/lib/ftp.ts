@@ -72,7 +72,7 @@ export class FTPUploader {
 export const ftpConfig: FTPConfig = {
   host: 'ftp.assetacademy.id',
   port: 21,
-  user: 'admindata@assetacademy.id',
+  user: 'files@assetacademy.id',
   password: 'komputer123@@'
 }
 
