@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { ftpUploader } from '@/lib/ftp'
+import { writeFile, unlink } from 'fs/promises'
+import path from 'path'
+import { IncomingForm } from 'formidable'
+import crypto from 'crypto'
 
 export async function GET(request: NextRequest) {
   try {
@@ -209,7 +214,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
+
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -220,119 +225,217 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const {
-      title,
-      summary,
-      category,
-      classification,
-      visibility,
-      unit_id,
-      effective_date,
-      expiry_date,
-      tags
-    } = body
-
-    // Validate required fields
-    if (!title || !unit_id) {
-      return NextResponse.json(
-        { error: 'Title and unit are required' },
-        { status: 400 }
-      )
-    }
-
-    // Check if the owner user exists (additional validation for production safety)
-    const ownerUser = await db.user.findUnique({
-      where: { id: session.user.id }
+    // Parse multipart form data
+    const form = new IncomingForm({
+      keepExtensions: true,
+      maxFileSize: 50 * 1024 * 1024, // 50MB
     })
-    if (!ownerUser) {
-      return NextResponse.json(
-        { error: 'User not found in database. Please contact administrator.' },
-        { status: 400 }
-      )
-    }
 
-    // Check if unit exists
-    const unitExists = await db.unit.findUnique({
-      where: { id: unit_id }
-    })
-    if (!unitExists) {
-      return NextResponse.json(
-        { error: 'Invalid unit selected' },
-        { status: 400 }
-      )
-    }
-
-    // Create document
-    const document = await db.document.create({
-      data: {
-        title,
-        summary,
-        category,
-        classification: classification || 'LOW',
-        visibility: visibility || 'INTERNAL',
-        status: 'DRAFT',
-        unit_id,
-        owner_user_id: session.user.id,
-        effective_date: effective_date ? new Date(effective_date) : null,
-        expiry_date: expiry_date ? new Date(expiry_date) : null,
-        tags: tags ? {
-          connectOrCreate: tags.map((tagName: string) => ({
-            where: { name: tagName },
-            create: { name: tagName }
-          }))
-        } : undefined
-      },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            full_name: true,
-            email: true
-          }
-        },
-        unit: {
-          select: {
-            id: true,
-            code: true,
-            name: true
-          }
-        },
-        tags: {
-          include: {
-            tag: true
-          }
+    return new Promise((resolve, reject) => {
+      form.parse(request as any, async (err, fields, files) => {
+        if (err) {
+          console.error('Form parse error:', err)
+          resolve(NextResponse.json({ error: 'Invalid form data' }, { status: 400 }))
+          return
         }
-      }
-    })
 
-    // Create timeline event
-    await db.documentTimeline.create({
-      data: {
-        document_id: document.id,
-        event_type: 'CREATED',
-        actor_user_id: session.user.id,
-        notes: 'Document created'
-      }
-    })
+        try {
+          // Extract form fields
+          const title = Array.isArray(fields.title) ? fields.title[0] : fields.title
+          const summary = Array.isArray(fields.summary) ? fields.summary[0] : fields.summary
+          const category = Array.isArray(fields.category) ? fields.category[0] : fields.category
+          const classification = Array.isArray(fields.classification) ? fields.classification[0] : fields.classification
+          const visibility = Array.isArray(fields.visibility) ? fields.visibility[0] : fields.visibility
+          const unit_id = Array.isArray(fields.unit_id) ? fields.unit_id[0] : fields.unit_id
+          const effective_date = Array.isArray(fields.effective_date) ? fields.effective_date[0] : fields.effective_date
+          const expiry_date = Array.isArray(fields.expiry_date) ? fields.expiry_date[0] : fields.expiry_date
+          const tags = Array.isArray(fields.tags) ? fields.tags[0] : fields.tags
+          const change_log = Array.isArray(fields.change_log) ? fields.change_log[0] : fields.change_log
 
-    // Create audit log
-    await db.auditLog.create({
-      data: {
-        actor_user_id: session.user.id,
-        action: 'DOC_CREATE',
-        resource_type: 'Document',
-        resource_id: document.id,
-        meta: JSON.stringify({ title: document.title })
-      }
-    })
+          // Validate required fields
+          if (!title || !unit_id) {
+            resolve(NextResponse.json({ error: 'Title and unit are required' }, { status: 400 }))
+            return
+          }
 
-    return NextResponse.json(document, { status: 201 })
+          // Check if the owner user exists
+          const ownerUser = await db.user.findUnique({
+            where: { id: session.user.id }
+          })
+          if (!ownerUser) {
+            resolve(NextResponse.json({ error: 'User not found in database. Please contact administrator.' }, { status: 400 }))
+            return
+          }
+
+          // Check if unit exists
+          const unitExists = await db.unit.findUnique({
+            where: { id: unit_id }
+          })
+          if (!unitExists) {
+            resolve(NextResponse.json({ error: 'Invalid unit selected' }, { status: 400 }))
+            return
+          }
+
+          // Parse tags if provided
+          let parsedTags: string[] = []
+          if (tags) {
+            try {
+              parsedTags = JSON.parse(tags)
+            } catch (e) {
+              console.warn('Invalid tags format, ignoring')
+            }
+          }
+
+          // Handle tags - upsert tags first
+          const tagIds: string[] = []
+          if (parsedTags.length > 0) {
+            for (const tagName of parsedTags) {
+              const tag = await db.tag.upsert({
+                where: { name: tagName },
+                update: {},
+                create: { name: tagName }
+              })
+              tagIds.push(tag.id)
+            }
+          }
+
+          // Create document first
+          const document = await db.document.create({
+            data: {
+              title,
+              summary,
+              category,
+              classification: classification || 'LOW',
+              visibility: visibility || 'INTERNAL',
+              status: 'DRAFT',
+              unit_id,
+              owner_user_id: session.user.id,
+              effective_date: effective_date ? new Date(effective_date) : null,
+              expiry_date: expiry_date ? new Date(expiry_date) : null,
+            },
+            include: {
+              owner: {
+                select: {
+                  id: true,
+                  full_name: true,
+                  email: true
+                }
+              },
+              unit: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true
+                }
+              },
+              tags: {
+                include: {
+                  tag: true
+                }
+              }
+            }
+          })
+
+          // Create document tags if any
+          if (tagIds.length > 0) {
+            await db.documentTag.createMany({
+              data: tagIds.map(tagId => ({
+                document_id: document.id,
+                tag_id: tagId
+              }))
+            })
+          }
+          let fileUrl: string | null = null
+          if (files.file && files.file[0]) {
+            const file = files.file[0]
+            const fileName = file.originalFilename || `file_${Date.now()}`
+            const fileExtension = path.extname(fileName)
+            const randomName = crypto.randomBytes(16).toString('hex') + fileExtension
+
+            // Generate remote path
+            const currentDate = new Date()
+            const year = currentDate.getFullYear()
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+            const remotePath = `documents/${year}/${month}/${randomName}`
+
+            try {
+              // Upload to FTP
+              fileUrl = await ftpUploader.uploadFile(file.filepath, remotePath)
+
+              // Generate file hash
+              const fs = require('fs')
+              const fileBuffer = fs.readFileSync(file.filepath)
+              const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
+
+              // Create document version
+              const version = await db.documentVersion.create({
+                data: {
+                  document_id: document.id,
+                  version_label: '1.0',
+                  change_type: 'MAJOR',
+                  change_log: change_log || 'Initial version',
+                  file_path: fileUrl,
+                  file_hash: fileHash,
+                  file_mime: file.mimetype || null,
+                  file_size: file.size || null,
+                  created_by: session.user.id,
+                  is_published: false
+                }
+              })
+
+              // Update document with current version
+              await db.document.update({
+                where: { id: document.id },
+                data: {
+                  current_version_id: version.id,
+                  status: 'DRAFT'
+                }
+              })
+
+              // Clean up temp file
+              await unlink(file.filepath)
+
+            } catch (uploadError) {
+              console.error('File upload failed:', uploadError)
+              // Continue without file, but log error
+            }
+          }
+
+          // Create timeline event
+          await db.documentTimeline.create({
+            data: {
+              document_id: document.id,
+              version_id: fileUrl ? (await db.documentVersion.findFirst({ where: { document_id: document.id } }))?.id : null,
+              event_type: 'CREATED',
+              actor_user_id: session.user.id,
+              notes: 'Document created'
+            }
+          })
+
+          // Create audit log
+          await db.auditLog.create({
+            data: {
+              actor_user_id: session.user.id,
+              action: 'DOC_CREATE',
+              resource_type: 'Document',
+              resource_id: document.id,
+              meta: JSON.stringify({ title: document.title, has_file: !!fileUrl })
+            }
+          })
+
+          resolve(NextResponse.json({
+            ...document,
+            file_url: fileUrl
+          }, { status: 201 }))
+
+        } catch (error) {
+          console.error('Error creating document:', error)
+          resolve(NextResponse.json({ error: 'Internal server error' }, { status: 500 }))
+        }
+      })
+    })
   } catch (error) {
-    console.error('Error creating document:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('Error in POST handler:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
