@@ -1,83 +1,101 @@
-import { Client } from 'basic-ftp'
-
-export interface FTPConfig {
-  host: string
-  port: number
-  user: string
-  password: string
-  secure?: boolean // For SSL/TLS connections
+export interface DropboxConfig {
+  accessToken: string
 }
 
-export class FTPUploader {
-  private config: FTPConfig
+export class DropboxUploader {
+  private config: DropboxConfig
 
-  constructor(config: FTPConfig) {
+  constructor(config: DropboxConfig) {
     this.config = config
   }
 
   async uploadFile(localPath: string, remotePath: string): Promise<string> {
-    const client = new Client()
-    try {
-      await client.access({
-        host: this.config.host,
-        port: this.config.port,
-        user: this.config.user,
-        password: this.config.password,
-        secure: this.config.secure || false
-      })
+    const fs = await import('fs/promises')
 
-      // Create remote directory if it doesn't exist
-      const remoteDir = remotePath.substring(0, remotePath.lastIndexOf('/'))
-      if (remoteDir) {
-        try {
-          await client.ensureDir(remoteDir)
-        } catch (dirError) {
-          console.warn('Could not create remote directory:', dirError)
-        }
+    try {
+      // Read file content
+      const fileContent = await fs.readFile(localPath)
+
+      // Prepare Dropbox API request
+      const dropboxArg = {
+        path: remotePath,
+        mode: { '.tag': 'add' },
+        autorename: true
       }
 
-      // Upload file
-      await client.uploadFrom(localPath, remotePath)
+      const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`,
+          'Content-Type': 'application/octet-stream',
+          'Dropbox-API-Arg': JSON.stringify(dropboxArg)
+        },
+        body: fileContent
+      })
 
-      // Return the public URL
-      const publicUrl = `https://${this.config.host}/aksesdata/${remotePath}`
-      return publicUrl
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errorMessage = `Dropbox upload failed: ${response.status} ${errorText}`
+
+        if (response.status === 401) {
+          errorMessage = 'Dropbox access token is invalid or expired. Please update the access token in the configuration.'
+        }
+
+        throw new Error(errorMessage)
+      }
+
+      const result = await response.json()
+
+      // Create shared link for public access
+      const shareResponse = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          path: result.path_display,
+          settings: {
+            requested_visibility: 'public'
+          }
+        })
+      })
+
+      if (shareResponse.ok) {
+        const shareResult = await shareResponse.json()
+        // Convert to direct download link
+        return shareResult.url.replace('?dl=0', '?dl=1')
+      } else {
+        // Fallback: construct sharing URL manually
+        console.warn('Failed to create shared link, using fallback URL')
+        return `https://www.dropbox.com/s/${result.id.split(':')[1]}${result.name}?dl=1`
+      }
 
     } catch (error) {
-      console.error('FTP upload failed:', error)
+      console.error('Dropbox upload failed:', error)
       throw error
-    } finally {
-      client.close()
     }
   }
 
   async testConnection(): Promise<boolean> {
-    const client = new Client()
     try {
-      await client.access({
-        host: this.config.host,
-        port: this.config.port,
-        user: this.config.user,
-        password: this.config.password,
-        secure: this.config.secure || false
+      const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.accessToken}`
+        }
       })
-      return true
+      return response.ok
     } catch (error) {
-      console.error('FTP connection test failed:', error)
+      console.error('Dropbox connection test failed:', error)
       return false
-    } finally {
-      client.close()
     }
   }
 }
 
-// Default FTP config - Now using Web Disk
-export const ftpConfig: FTPConfig = {
-  host: 'assetacademy.id',
-  port: 2078,
-  user: 'aksesdata@assetacademy.id',
-  password: 'komputer123@@',
-  secure: true // SSL Enabled
+// Default Dropbox config
+export const dropboxConfig: DropboxConfig = {
+  accessToken: process.env.DROPBOX_ACCESS_TOKEN || ''
 }
 
-export const ftpUploader = new FTPUploader(ftpConfig)
+export const dropboxUploader = new DropboxUploader(dropboxConfig)

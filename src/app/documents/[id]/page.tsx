@@ -54,6 +54,7 @@ interface Document {
     version_label: string
     change_type: string
     change_log?: string
+    file_path: string
     file_size?: number
     file_mime?: string
     created_at: string
@@ -255,8 +256,35 @@ export default function DocumentDetailPage() {
     }
   }
 
-  const handlePreview = async (versionId: string, fileName: string, mimeType: string) => {
-    // Open file in new tab using browser's native viewer
+  const handlePreview = async (versionId: string, fileName: string, mimeType: string, filePath?: string) => {
+    // If filePath is provided directly, use it
+    if (filePath) {
+      window.open(filePath, '_blank')
+      return
+    }
+
+    // Fallback: find the version in current data
+    const version = document?.versions?.find(v => v.id === versionId)
+    if (version?.file_path) {
+      window.open(version.file_path, '_blank')
+      return
+    }
+
+    // Last fallback: fetch from API
+    try {
+      const response = await fetch(`/api/documents/${documentId}/versions/${versionId}`)
+      if (response.ok) {
+        const versionData = await response.json()
+        if (versionData.file_path) {
+          window.open(versionData.file_path, '_blank')
+          return
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching version data:', error)
+    }
+
+    // Final fallback to old API
     const downloadUrl = `/api/documents/${documentId}/versions/${versionId}/download`
     window.open(downloadUrl, '_blank')
   }
@@ -576,7 +604,7 @@ export default function DocumentDetailPage() {
                     </div>
                     <div>
                       <Label className="text-sm font-medium">Owner</Label>
-                      <p className="text-sm text-muted-foreground">{document.owner.full_name}</p>
+                      <p className="text-sm text-muted-foreground">{document.owner?.full_name || 'Unknown User'}</p>
                     </div>
                   </div>
 
@@ -618,7 +646,7 @@ export default function DocumentDetailPage() {
 
                       <div>
                         <Label className="text-sm font-medium">Uploaded by</Label>
-                        <p className="text-sm text-muted-foreground">{document.current_version.created_by.full_name}</p>
+                        <p className="text-sm text-muted-foreground">{document.current_version?.created_by?.full_name || 'Unknown User'}</p>
                       </div>
 
                       <div>
@@ -679,7 +707,7 @@ export default function DocumentDetailPage() {
                         <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
                           <div className="flex items-center gap-1">
                             <User className="h-3 w-3" />
-                            {event.actor.full_name}
+                            {event.actor?.full_name || 'Unknown User'}
                           </div>
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
@@ -750,7 +778,7 @@ export default function DocumentDetailPage() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-medium">{version.created_by.full_name}</p>
+                            <p className="text-sm font-medium">{version.created_by?.full_name || 'Unknown User'}</p>
                             <p className="text-xs text-muted-foreground">
                               {formatDate(version.created_at)}
                             </p>
@@ -770,7 +798,7 @@ export default function DocumentDetailPage() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handlePreview(version.id, `${document.title}_v${version.version_label}`, version.file_mime || 'application/octet-stream')}
+                            onClick={() => handlePreview(version.id, `${document.title}_v${version.version_label}`, version.file_mime || 'application/octet-stream', version.file_path)}
                             title="Open file in new tab"
                           >
                             <Eye className="h-3 w-3 mr-1" />
@@ -860,10 +888,10 @@ export default function DocumentDetailPage() {
                     <div key={comment.id} className="border rounded-lg p-4">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
-                          {comment.author.full_name.charAt(0)}
+                          {comment.author?.full_name?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{comment.author.full_name}</p>
+                          <p className="font-medium text-sm">{comment.author?.full_name || 'Unknown User'}</p>
                           <p className="text-xs text-muted-foreground">
                             {formatDate(comment.created_at)}
                             {comment.version && ` • v${comment.version.version_label}`}

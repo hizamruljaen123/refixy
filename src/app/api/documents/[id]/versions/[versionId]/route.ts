@@ -25,7 +25,16 @@ export async function GET(
       include: {
         versions: {
           where: { id: versionId },
-          take: 1
+          take: 1,
+          include: {
+            creator: {
+              select: {
+                id: true,
+                full_name: true,
+                email: true
+              }
+            }
+          }
         }
       }
     })
@@ -51,39 +60,22 @@ export async function GET(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    // Check if file exists
-    const filePath = path.join(process.cwd(), 'public', 'files', version.file_path)
-
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ error: 'File not found on disk' }, { status: 404 })
-    }
-
-    // Read file and return as response
-    const fileBuffer = fs.readFileSync(filePath)
-
-    // Get MIME type based on file extension
-    const ext = path.extname(version.file_path).toLowerCase()
-    const mimeTypes: { [key: string]: string } = {
-      '.pdf': 'application/pdf',
-      '.doc': 'application/msword',
-      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      '.txt': 'text/plain',
-      '.rtf': 'application/rtf'
-    }
-
-    const mimeType = mimeTypes[ext] || 'application/octet-stream'
-
-    // Return file as response
-    return new NextResponse(fileBuffer, {
-      headers: {
-        'Content-Type': mimeType,
-        'Content-Disposition': `inline; filename="${document.title}_v${version.version_label}${ext}"`,
-        'Cache-Control': 'private, max-age=3600'
-      }
+    // Return version details including file_path
+    return NextResponse.json({
+      id: version.id,
+      version_label: version.version_label,
+      change_type: version.change_type,
+      change_log: version.change_log,
+      file_path: version.file_path,
+      file_hash: version.file_hash,
+      file_mime: version.file_mime,
+      file_size: version.file_size,
+      created_at: version.created_at,
+      created_by: version.creator
     })
 
   } catch (error) {
-    console.error('Error downloading version:', error)
+    console.error('Error getting version details:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

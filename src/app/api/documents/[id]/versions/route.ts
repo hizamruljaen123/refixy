@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { DocumentTextExtractor, saveDocumentText, ExtractedText } from '@/lib/text-extraction'
-import { ftpUploader } from '@/lib/ftp'
+import { dropboxUploader } from '@/lib/ftp'
 import { writeFile, unlink } from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
@@ -97,8 +97,8 @@ export async function POST(
     const baseName = path.basename(sanitizedName, fileExtension)
     const fileName = `${timestamp}_${id}_${versionLabel}_${baseName}${fileExtension}`
 
-    // Create remote path for Web Disk
-    const remotePath = `aksesdata/${dateFolder}/${fileName}`
+    // Create remote path for Dropbox
+    const remotePath = `/data_dokumen/${dateFolder}/${fileName}`
 
     // Convert file to buffer for hash and upload
     const fileBuffer = Buffer.from(await file.arrayBuffer())
@@ -117,8 +117,9 @@ export async function POST(
       // Don't fail the upload if text extraction fails
     }
 
-    // Upload to Web Disk
-    const fileUrl = await ftpUploader.uploadFile(tempFilePath, remotePath)
+    // Upload to Dropbox
+    const fileUrl = await dropboxUploader.uploadFile(tempFilePath, remotePath)
+    console.log(`✅ File uploaded to Dropbox: ${fileUrl}`)
 
     // Clean up temp file
     await unlink(tempFilePath)

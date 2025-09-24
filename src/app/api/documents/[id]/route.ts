@@ -48,7 +48,15 @@ export async function GET(
           orderBy: {
             created_at: 'desc'
           },
-          include: {
+          select: {
+            id: true,
+            version_label: true,
+            change_type: true,
+            change_log: true,
+            file_path: true,
+            file_size: true,
+            file_mime: true,
+            created_at: true,
             creator: {
               select: {
                 id: true,
