@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { DocumentTextExtractor, saveDocumentText } from '@/lib/text-extraction'
-import { writeFile } from 'fs/promises'
-import fs from 'fs'
+import { DocumentTextExtractor, saveDocumentText, ExtractedText } from '@/lib/text-extraction'
+import { ftpUploader } from '@/lib/ftp'
+import { writeFile, unlink } from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
 
@@ -89,12 +89,6 @@ export async function POST(
     // Create upload directory based on date
     const now = new Date()
     const dateFolder = now.toISOString().split('T')[0] // YYYY-MM-DD format
-    const uploadDir = path.join(process.cwd(), 'public', 'files', dateFolder)
-    
-    // Ensure directory exists
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true })
-    }
 
     // Generate unique filename with timestamp and sanitized original name
     const timestamp = now.getTime()
@@ -102,12 +96,32 @@ export async function POST(
     const fileExtension = path.extname(file.name)
     const baseName = path.basename(sanitizedName, fileExtension)
     const fileName = `${timestamp}_${id}_${versionLabel}_${baseName}${fileExtension}`
-    const filePath = path.join(uploadDir, fileName)
+
+    // Create remote path for Web Disk
+    const remotePath = `aksesdata/${dateFolder}/${fileName}`
+
+    // Convert file to buffer for hash and upload
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
 
-    // Save file
-    await writeFile(filePath, fileBuffer)
+    // Create temp file for upload
+    const tempFilePath = path.join(process.cwd(), 'tmp', `temp_${fileName}`)
+    await writeFile(tempFilePath, fileBuffer)
+
+    // Extract text content for FTS BEFORE uploading
+    let extractedText: ExtractedText | null = null
+    try {
+      extractedText = await DocumentTextExtractor.extractFromFile(tempFilePath, file.type)
+    } catch (error) {
+      console.error('Error extracting text from document:', error)
+      // Don't fail the upload if text extraction fails
+    }
+
+    // Upload to Web Disk
+    const fileUrl = await ftpUploader.uploadFile(tempFilePath, remotePath)
+
+    // Clean up temp file
+    await unlink(tempFilePath)
 
     // Create document version
     const documentVersion = await db.documentVersion.create({
@@ -116,7 +130,7 @@ export async function POST(
         version_label: versionLabel,
         change_type: changeType,
         change_log: changeLog,
-        file_path: filePath,
+        file_path: fileUrl,
         file_hash: fileHash,
         file_mime: file.type,
         file_size: file.size,
@@ -132,13 +146,9 @@ export async function POST(
       }
     })
 
-    // Extract text content for FTS
-    try {
-      const extractedText = await DocumentTextExtractor.extractFromFile(filePath, file.type)
+    // Save extracted text if any
+    if (extractedText) {
       await saveDocumentText(documentVersion.id, extractedText)
-    } catch (error) {
-      console.error('Error extracting text from document:', error)
-      // Don't fail the upload if text extraction fails
     }
 
     // Update document's current version
@@ -175,7 +185,7 @@ export async function POST(
           originalFileName: file.name,
           fileSize: file.size,
           uploadDate: dateFolder,
-          filePath: filePath
+          filePath: fileUrl
         })
       }
     })

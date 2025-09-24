@@ -40,7 +40,7 @@ export class FTPUploader {
       await client.uploadFrom(localPath, remotePath)
 
       // Return the public URL
-      const publicUrl = `https://${this.config.host}/files/${remotePath}`
+      const publicUrl = `https://${this.config.host}/aksesdata/${remotePath}`
       return publicUrl
 
     } catch (error) {
