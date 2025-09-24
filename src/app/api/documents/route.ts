@@ -241,6 +241,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if the owner user exists (additional validation for production safety)
+    const ownerUser = await db.user.findUnique({
+      where: { id: session.user.id }
+    })
+    if (!ownerUser) {
+      return NextResponse.json(
+        { error: 'User not found in database. Please contact administrator.' },
+        { status: 400 }
+      )
+    }
+
+    // Check if unit exists
+    const unitExists = await db.unit.findUnique({
+      where: { id: unit_id }
+    })
+    if (!unitExists) {
+      return NextResponse.json(
+        { error: 'Invalid unit selected' },
+        { status: 400 }
+      )
+    }
+
     // Create document
     const document = await db.document.create({
       data: {
