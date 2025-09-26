@@ -14,72 +14,55 @@ export interface ExtractedText {
     subject?: string
     created?: Date
     modified?: Date
-  }
+}
+
 }
 
 export class DocumentTextExtractor {
   static async extractFromFile(filePath: string, mimeType: string): Promise<ExtractedText> {
     try {
-      // For now, return a placeholder text
-      // In a real implementation, you would:
-      // 1. Read the file based on mimeType
-      // 2. Extract text content using appropriate library
-      // 3. Extract metadata if available
-      
-      let content = ''
-      
-      switch (mimeType) {
-        case 'application/pdf':
-          content = await this.extractFromPDF(filePath)
-          break
-        case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
-          content = await this.extractFromDOCX(filePath)
-          break
-        case 'application/msword':
-          content = await this.extractFromDOC(filePath)
-          break
-        default:
-          content = 'Text extraction not supported for this file type'
-      }
-      
-      return {
-        content,
-        metadata: {
-          title: 'Extracted from document',
-          created: new Date()
-        }
-      }
+      const content = await this.generatePlaceholderContent(mimeType, `file: ${filePath}`)
+      return this.buildExtractionResult(content)
     } catch (error) {
       console.error('Error extracting text from document:', error)
-      return {
-        content: '',
-        metadata: {
-          title: 'Extraction failed',
-          created: new Date()
-        }
-      }
+      return this.buildExtractionResult('', 'Extraction failed')
     }
   }
-  
-  private static async extractFromPDF(filePath: string): Promise<string> {
-    // Placeholder for PDF text extraction
-    // In real implementation, use pdf-parse or similar
-    return `PDF document content from ${filePath}. This is placeholder text. 
-    In a real implementation, this would contain the actual text content extracted from the PDF file.`
+
+  static async extractFromBuffer(buffer: Buffer, mimeType: string): Promise<ExtractedText> {
+    try {
+      const content = await this.generatePlaceholderContent(mimeType, `buffer size: ${buffer.length} bytes`)
+      return this.buildExtractionResult(content)
+    } catch (error) {
+      console.error('Error extracting text from buffer:', error)
+      return this.buildExtractionResult('', 'Extraction failed')
+    }
   }
-  
-  private static async extractFromDOCX(filePath: string): Promise<string> {
-    // Placeholder for DOCX text extraction
-    // In real implementation, use mammoth.js or similar
-    return `DOCX document content from ${filePath}. This is placeholder text.
-    In a real implementation, this would contain the actual text content extracted from the DOCX file.`
+
+  private static async generatePlaceholderContent(mimeType: string, sourceDescriptor: string): Promise<string> {
+    switch (mimeType) {
+      case 'application/pdf':
+        return `PDF document content extracted from ${sourceDescriptor}. This is placeholder text.
+In a real implementation, this would contain the actual text content extracted from the PDF file.`
+      case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+        return `DOCX document content extracted from ${sourceDescriptor}. This is placeholder text.
+In a real implementation, this would contain the actual text content extracted from the DOCX file.`
+      case 'application/msword':
+        return `DOC document content extracted from ${sourceDescriptor}. This is placeholder text.
+In a real implementation, this would contain the actual text content extracted from the DOC file.`
+      default:
+        return `Text extraction is not yet supported for files of type ${mimeType || 'unknown'} (${sourceDescriptor}).`
+    }
   }
-  
-  private static async extractFromDOC(filePath: string): Promise<string> {
-    // Placeholder for DOC text extraction
-    // In real implementation, use officeparser or similar
-    return `DOC document content from ${filePath}. This is placeholder text.
-    In a real implementation, this would contain the actual text content extracted from the DOC file.`
+
+  private static buildExtractionResult(content: string, title: string = 'Extracted from document'): ExtractedText {
+    return {
+      content,
+      metadata: {
+        title,
+        created: new Date()
+      }
+    }
   }
 }
 

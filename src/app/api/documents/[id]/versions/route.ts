@@ -4,7 +4,6 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { DocumentTextExtractor, saveDocumentText, ExtractedText } from '@/lib/text-extraction'
 import { dropboxUploader } from '@/lib/ftp'
-import { writeFile, unlink } from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
 
@@ -104,25 +103,18 @@ export async function POST(
     const fileBuffer = Buffer.from(await file.arrayBuffer())
     const fileHash = crypto.createHash('sha256').update(fileBuffer).digest('hex')
 
-    // Create temp file for upload
-    const tempFilePath = path.join(process.cwd(), 'tmp', `temp_${fileName}`)
-    await writeFile(tempFilePath, fileBuffer)
-
     // Extract text content for FTS BEFORE uploading
     let extractedText: ExtractedText | null = null
     try {
-      extractedText = await DocumentTextExtractor.extractFromFile(tempFilePath, file.type)
+      extractedText = await DocumentTextExtractor.extractFromBuffer(fileBuffer, file.type)
     } catch (error) {
       console.error('Error extracting text from document:', error)
       // Don't fail the upload if text extraction fails
     }
 
     // Upload to Dropbox
-    const fileUrl = await dropboxUploader.uploadFile(tempFilePath, remotePath)
+    const fileUrl = await dropboxUploader.uploadBuffer(fileBuffer, remotePath)
     console.log(`✅ File uploaded to Dropbox: ${fileUrl}`)
-
-    // Clean up temp file
-    await unlink(tempFilePath)
 
     // Create document version
     const documentVersion = await db.documentVersion.create({
