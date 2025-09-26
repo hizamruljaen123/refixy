@@ -12,7 +12,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { FileText, Download, Eye, Edit, MessageSquare, Clock, Upload, ArrowLeft, User, Calendar, Paperclip, Image as ImageIcon, X } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { FileText, Download, Eye, Edit, MessageSquare, Clock, Upload, ArrowLeft, User, Calendar, Paperclip, Image as ImageIcon, X, Trash2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import AppLayout from "@/components/layouts/app-layout"
@@ -169,6 +180,9 @@ export default function DocumentDetailPage() {
   })
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false)
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
+  const [versionToDelete, setVersionToDelete] = useState<string | null>(null)
+  const [isDeletingVersion, setIsDeletingVersion] = useState(false)
+  const [isUpdatingRevision, setIsUpdatingRevision] = useState(false)
 
   const fetchDocument = async () => {
     try {
@@ -492,6 +506,7 @@ export default function DocumentDetailPage() {
 
   const handleStatusChange = async (versionId: string, requestId: string, status: RevisionStatus) => {
     setUpdatingStatusId(requestId)
+    setIsUpdatingRevision(true)
     try {
       const response = await fetch(`/api/documents/${documentId}/versions/${versionId}/revision-requests/${requestId}`, {
         method: 'PATCH',
@@ -511,6 +526,33 @@ export default function DocumentDetailPage() {
       toast.error(err instanceof Error ? err.message : 'Failed to update status')
     } finally {
       setUpdatingStatusId(null)
+      setIsUpdatingRevision(false)
+    }
+  }
+
+  const handleDeleteVersion = async () => {
+    if (!versionToDelete) return
+
+    setIsDeletingVersion(true)
+    try {
+      const response = await fetch(`/api/documents/${documentId}/versions/${versionToDelete}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.error || 'Failed to delete version')
+      }
+
+      toast.success('Version deleted successfully')
+      setVersionToDelete(null)
+      await fetchDocument() // Refresh document data
+      await fetchTimeline() // Refresh timeline
+    } catch (err) {
+      console.error('Failed to delete version:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to delete version')
+    } finally {
+      setIsDeletingVersion(false)
     }
   }
 
@@ -539,6 +581,40 @@ export default function DocumentDetailPage() {
 
   return (
     <AppLayout>
+      {/* Loading Overlay for Delete Version */}
+      {isDeletingVersion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-4">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-destructive"></div>
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900">Deleting Version</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Removing document file, revision requests, comments, and related data...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loading Overlay for Revision Status Update */}
+      {isUpdatingRevision && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full mx-4">
+            <div className="flex flex-col items-center gap-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900">Updating Revision Status</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Processing revision status change...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -1032,6 +1108,19 @@ export default function DocumentDetailPage() {
                                 <Edit className="mr-1 h-3 w-3" />
                                 Request Revision
                               </Button>
+                              {/* Delete Version Button - Only for Super Admin and non-current versions */}
+                              {session?.user && (
+                                (session.user.roles?.includes('ADMIN') || session.user.permissions?.includes('ADMIN'))
+                              ) && index !== 0 && (
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => setVersionToDelete(version.id)}
+                                >
+                                  <Trash2 className="mr-1 h-3 w-3" />
+                                  Delete Version
+                                </Button>
+                              )}
                             </div>
 
                             <div className="mt-6 space-y-4">
@@ -1249,6 +1338,49 @@ export default function DocumentDetailPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Delete Version Confirmation Dialog */}
+            <AlertDialog open={!!versionToDelete} onOpenChange={(open) => !open && setVersionToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Document Version</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete this document version? This action cannot be undone.
+                    <br /><br />
+                    <strong>This will permanently delete:</strong>
+                    <ul className="mt-2 list-disc list-inside space-y-1">
+                      <li>The document file from storage</li>
+                      <li>All revision requests and attachments for this version</li>
+                      <li>All comments associated with this version</li>
+                      <li>All timeline events for this version</li>
+                      <li>All audit logs related to this version</li>
+                    </ul>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeletingVersion}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteVersion}
+                    disabled={isDeletingVersion}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeletingVersion ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Version
+                      </>
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           {/* Comments Tab */}

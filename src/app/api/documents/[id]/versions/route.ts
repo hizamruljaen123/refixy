@@ -118,13 +118,14 @@ export async function POST(
     console.log(`✅ File uploaded to Dropbox: ${fileUrl}`)
 
     // Create document version
-    const documentVersion = await db.documentVersion.create({
+    const documentVersion = await (db as any).documentVersion.create({
       data: {
         document_id: id,
         version_label: versionLabel,
         change_type: changeType,
         change_log: changeLog,
         file_path: fileUrl,
+        remote_path: remotePath,
         file_hash: fileHash,
         file_mime: file.type,
         file_size: file.size,

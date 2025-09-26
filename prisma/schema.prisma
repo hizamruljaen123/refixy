@@ -135,7 +135,8 @@ model DocumentVersion {
   version_label String          // e.g. 1.0, 1.1, 2.0
   change_type  VersionChangeType // MAJOR/MINOR
   change_log   String?          // ringkasan perubahan
-  file_path    String           // path di storage
+  file_path    String           // public sharing URL
+  remote_path  String?          // internal Dropbox path for deletion
   file_hash    String           // checksum (SHA-256)
   file_mime    String?
   file_size    Int?
@@ -216,7 +217,7 @@ model DocumentTimeline {
 
   // Relations
   document Document         @relation(fields: [document_id], references: [id], onDelete: Cascade)
-  version  DocumentVersion? @relation(fields: [version_id], references: [id])
+  version  DocumentVersion? @relation(fields: [version_id], references: [id], onDelete: Cascade)
   actor    User             @relation(fields: [actor_user_id], references: [id])
 
   @@map("document_timeline")
@@ -288,7 +289,7 @@ model Comment {
 
   // Relations
   document Document         @relation(fields: [document_id], references: [id], onDelete: Cascade)
-  version  DocumentVersion? @relation(fields: [version_id], references: [id])
+  version  DocumentVersion? @relation(fields: [version_id], references: [id], onDelete: Cascade)
   author   User             @relation(fields: [author_user_id], references: [id])
 
   @@map("comments")

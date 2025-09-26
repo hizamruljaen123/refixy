@@ -242,6 +242,19 @@ CREATE TABLE "public"."notifications" (
     CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "public"."integration_settings" (
+    "id" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" TEXT,
+    "description" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "updated_by" TEXT,
+
+    CONSTRAINT "integration_settings_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "public"."users"("email");
 
@@ -271,6 +284,9 @@ CREATE INDEX "document_revision_requests_version_id_idx" ON "public"."document_r
 
 -- CreateIndex
 CREATE INDEX "document_revision_attachments_revision_request_id_idx" ON "public"."document_revision_attachments"("revision_request_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "integration_settings_key_key" ON "public"."integration_settings"("key");
 
 -- AddForeignKey
 ALTER TABLE "public"."user_roles" ADD CONSTRAINT "user_roles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -352,3 +368,6 @@ ALTER TABLE "public"."comments" ADD CONSTRAINT "comments_author_user_id_fkey" FO
 
 -- AddForeignKey
 ALTER TABLE "public"."notifications" ADD CONSTRAINT "notifications_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."integration_settings" ADD CONSTRAINT "integration_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "public"."users"("id") ON DELETE SET NULL ON UPDATE CASCADE;

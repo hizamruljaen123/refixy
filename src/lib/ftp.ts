@@ -95,18 +95,31 @@ export class DropboxUploader {
     return this.uploadContent(buffer, remotePath)
   }
 
-  async testConnection(): Promise<boolean> {
+  async deleteFile(remotePath: string): Promise<boolean> {
     try {
       const token = this.requireAccessToken()
-      const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+
+      // Dropbox API delete
+      const response = await fetch('https://api.dropboxapi.com/2/files/delete_v2', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          path: remotePath
+        })
       })
-      return response.ok
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`Dropbox delete failed: ${response.status} ${errorText}`)
+        return false
+      }
+
+      return true
     } catch (error) {
-      console.error('Dropbox connection test failed:', error)
+      console.error('Dropbox delete error:', error)
       return false
     }
   }
