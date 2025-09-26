@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { dropboxUploader } from '@/lib/ftp'
+import { getDropboxUploader } from '@/lib/ftp'
 import sharp from 'sharp'
 import path from 'path'
 
@@ -151,6 +151,8 @@ export async function POST(
       image_height: number | null
     }>
 
+    const uploader = await getDropboxUploader()
+
     for (const file of attachments) {
       if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
         return NextResponse.json({ error: `Unsupported image type: ${file.type}` }, { status: 400 })
@@ -168,7 +170,7 @@ export async function POST(
       const baseName = sanitizeFileName(file.name.replace(/\.[^/.]+$/, '')) || 'attachment'
       const remotePath = `/revision_requests/${documentId}/${versionId}/${timestamp}_${baseName}.jpg`
 
-      const fileUrl = await dropboxUploader.uploadBuffer(compressedBuffer, remotePath)
+      const fileUrl = await uploader.uploadBuffer(compressedBuffer, remotePath)
 
       uploadResults.push({
         file_url: fileUrl,

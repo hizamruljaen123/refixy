@@ -1,17 +1,27 @@
 import { promises as fs } from 'fs'
-
-export interface DropboxConfig {
-  accessToken: string
-}
+import { resolveDropboxAccessToken } from '@/lib/integration-settings'
 
 export class DropboxUploader {
-  private config: DropboxConfig
+  private accessToken: string | null
 
-  constructor(config: DropboxConfig) {
-    this.config = config
+  constructor(accessToken?: string | null) {
+    this.accessToken = accessToken ?? null
+  }
+
+  setAccessToken(token: string | null) {
+    this.accessToken = token ?? null
+  }
+
+  private requireAccessToken() {
+    if (!this.accessToken || this.accessToken.trim().length === 0) {
+      throw new Error('Dropbox access token is not configured. Please set it via the integration settings.')
+    }
+    return this.accessToken
   }
 
   private async uploadContent(fileContent: Buffer, remotePath: string): Promise<string> {
+    const token = this.requireAccessToken()
+
     // Prepare Dropbox API request
     const dropboxArg = {
       path: remotePath,
@@ -22,7 +32,7 @@ export class DropboxUploader {
     const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.config.accessToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/octet-stream',
         'Dropbox-API-Arg': JSON.stringify(dropboxArg)
       },
@@ -46,7 +56,7 @@ export class DropboxUploader {
     const shareResponse = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.config.accessToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -87,10 +97,11 @@ export class DropboxUploader {
 
   async testConnection(): Promise<boolean> {
     try {
+      const token = this.requireAccessToken()
       const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.config.accessToken}`
+          'Authorization': `Bearer ${token}`
         }
       })
       return response.ok
@@ -101,9 +112,10 @@ export class DropboxUploader {
   }
 }
 
-// Default Dropbox config
-export const dropboxConfig: DropboxConfig = {
-  accessToken: process.env.DROPBOX_ACCESS_TOKEN || ''
-}
+const dropboxUploader = new DropboxUploader(null)
 
-export const dropboxUploader = new DropboxUploader(dropboxConfig)
+export async function getDropboxUploader() {
+  const token = await resolveDropboxAccessToken()
+  dropboxUploader.setAccessToken(token)
+  return dropboxUploader
+}

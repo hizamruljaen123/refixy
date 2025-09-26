@@ -77,10 +77,20 @@ const navigationGroups = [
         description: "Document statistics and reports"
       },
       {
-        title: "Document Archive",
         url: "/documents/archive",
         icon: FolderOpen,
         description: "Manage archived documents"
+      }
+    ]
+  },
+  {
+    label: "System Settings",
+    items: [
+      {
+        title: "Integrations",
+        url: "/admin/integrations",
+        icon: Settings,
+        description: "Manage external service integrations"
       }
     ]
   }

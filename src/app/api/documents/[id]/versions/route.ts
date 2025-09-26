@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { DocumentTextExtractor, saveDocumentText, ExtractedText } from '@/lib/text-extraction'
-import { dropboxUploader } from '@/lib/ftp'
+import { getDropboxUploader } from '@/lib/ftp'
 import path from 'path'
 import crypto from 'crypto'
 
@@ -113,7 +113,8 @@ export async function POST(
     }
 
     // Upload to Dropbox
-    const fileUrl = await dropboxUploader.uploadBuffer(fileBuffer, remotePath)
+    const uploader = await getDropboxUploader()
+    const fileUrl = await uploader.uploadBuffer(fileBuffer, remotePath)
     console.log(`✅ File uploaded to Dropbox: ${fileUrl}`)
 
     // Create document version
