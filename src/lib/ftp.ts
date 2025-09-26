@@ -1,3 +1,7 @@
+import { promises as fs } from 'fs'
+import path from 'path'
+import { randomUUID } from 'crypto'
+
 export interface DropboxConfig {
   accessToken: string
 }
@@ -10,8 +14,6 @@ export class DropboxUploader {
   }
 
   async uploadFile(localPath: string, remotePath: string): Promise<string> {
-    const fs = await import('fs/promises')
-
     try {
       // Read file content
       const fileContent = await fs.readFile(localPath)
@@ -63,17 +65,32 @@ export class DropboxUploader {
 
       if (shareResponse.ok) {
         const shareResult = await shareResponse.json()
-        // Convert to direct download link
-        return shareResult.url.replace('?dl=0', '?dl=1')
+        // Convert to direct access link suitable for embeds
+        return shareResult.url
+          .replace('?dl=0', '?raw=1')
+          .replace('?dl=1', '?raw=1')
       } else {
         // Fallback: construct sharing URL manually
         console.warn('Failed to create shared link, using fallback URL')
-        return `https://www.dropbox.com/s/${result.id.split(':')[1]}${result.name}?dl=1`
+        return `https://www.dropbox.com/s/${result.id.split(':')[1]}${result.name}?raw=1`
       }
 
     } catch (error) {
       console.error('Dropbox upload failed:', error)
       throw error
+    }
+  }
+
+  async uploadBuffer(buffer: Buffer, remotePath: string): Promise<string> {
+    const tempDir = path.join(process.cwd(), 'tmp', 'dropbox')
+    await fs.mkdir(tempDir, { recursive: true })
+    const tempFilePath = path.join(tempDir, `upload_${Date.now()}_${randomUUID()}`)
+
+    try {
+      await fs.writeFile(tempFilePath, buffer)
+      return await this.uploadFile(tempFilePath, remotePath)
+    } finally {
+      await fs.unlink(tempFilePath).catch(() => undefined)
     }
   }
 

@@ -48,19 +48,25 @@ export async function GET(
           orderBy: {
             created_at: 'desc'
           },
-          select: {
-            id: true,
-            version_label: true,
-            change_type: true,
-            change_log: true,
-            file_path: true,
-            file_size: true,
-            file_mime: true,
-            created_at: true,
+          include: {
             creator: {
               select: {
                 id: true,
                 full_name: true
+              }
+            },
+            revision_requests: {
+              orderBy: {
+                created_at: 'desc'
+              },
+              include: {
+                requester: {
+                  select: {
+                    id: true,
+                    full_name: true
+                  }
+                },
+                attachments: true
               }
             }
           }

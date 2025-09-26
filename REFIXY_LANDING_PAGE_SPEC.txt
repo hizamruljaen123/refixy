@@ -1,0 +1,465 @@
+# REFIXY.ID - LANDING PAGE SPECIFICATIONS
+# Sistem Manajemen Dokumen Versi untuk Meningkatkan Produktivitas
+
+## 📋 RINGKASAN PROYEK
+Refixy.id adalah sistem manajemen dokumen versi yang dirancang untuk meningkatkan produktivitas tim dan individu dalam mengelola dokumen secara efisien. Platform ini menyediakan solusi lengkap untuk versioning, kolaborasi, dan kontrol akses dokumen.
+
+## 🎯 TUJUAN LANDING PAGE
+- Menarik calon pengguna untuk join waiting list
+- Mengkomunikasikan nilai produk dan fitur utama
+- Membangun trust dan kredibilitas
+- Mengumpulkan email untuk launch versi beta
+
+---
+
+## 🏗️ STRUKTUR HALAMAN LANDING PAGE
+
+### 1. HEADER/NAVIGATION BAR
+```
+[Logo Refixy.id] [Menu: Features | How It Works | Waitlist] [Join Waitlist Button]
+```
+
+**Fitur Header:**
+- Logo Refixy.id dengan tagline "Document Version Control Made Simple"
+- Navigation menu responsif (mobile-friendly)
+- Call-to-action button "Join Waitlist" yang prominent
+- Sticky header saat scroll
+
+### 2. HERO SECTION
+```
+╔══════════════════════════════════════════════════════════════╗
+║                    HERO SECTION                              ║
+║                                                              ║
+║  [Background Image: Team collaboration with documents]       ║
+║                                                              ║
+║  🎯 KELOLA DOKUMEN ANDA DENGAN LEBIH CERDAS                  ║
+║                                                              ║
+║  Tingkatkan Produktivitas Tim Anda dengan Sistem            ║
+║  Manajemen Dokumen Versi yang Powerful                       ║
+║                                                              ║
+║  ✅ Version Control Otomatis                                 ║
+║  ✅ Kolaborasi Real-time                                     ║
+║  ✅ Kontrol Akses yang Fleksibel                             ║
+║  ✅ Integrasi dengan Tools Favorit                           ║
+║                                                              ║
+║  [Input Email] [Join Waitlist Button]                        ║
+║                                                              ║
+║  Bergabunglah dengan 500+ profesional yang sudah            ║
+║  tertarik dengan Refixy.id                                   ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Elemen Hero:**
+- Headline yang menarik dan benefit-focused
+- Subheadline yang menjelaskan value proposition
+- 4 key benefits dengan checkmark icons
+- Email input form yang langsung terlihat
+- Social proof counter (500+ tertarik)
+- Background image yang relevan
+- Call-to-action yang jelas
+
+### 3. FEATURES SECTION
+```
+🎉 FITUR UTAMA REFIXY.ID
+```
+
+**Fitur Cards (Grid Layout 3x2):**
+
+#### Card 1: Version Control Canggih
+```
+🔄 AUTO VERSIONING
+Setiap perubahan dokumen otomatis tersimpan sebagai versi baru.
+Tidak pernah kehilangan revisi penting lagi.
+```
+
+#### Card 2: Kolaborasi Real-time
+```
+👥 REAL-TIME COLLABORATION
+Bekerja bersama tim secara simultan. Lihat perubahan
+saat itu juga dengan live cursor tracking.
+```
+
+#### Card 3: Kontrol Akses Granular
+```
+🔐 ADVANCED PERMISSIONS
+Kelola siapa yang bisa melihat, edit, atau approve
+dokumen dengan kontrol akses yang detail.
+```
+
+#### Card 4: Integrasi Tools
+```
+🔗 SEAMLESS INTEGRATIONS
+Terhubung dengan Google Drive, Dropbox, Slack,
+Microsoft Teams, dan tools produktivitas lainnya.
+```
+
+#### Card 5: Audit Trail Lengkap
+```
+📊 COMPREHENSIVE AUDIT
+Track setiap perubahan, siapa yang mengubah,
+kapan, dan mengapa. Full transparency.
+```
+
+#### Card 6: Backup & Recovery
+```
+🛡️ AUTOMATIC BACKUP
+Dokumen Anda aman dengan backup otomatis
+dan kemampuan recovery dalam hitungan detik.
+```
+
+### 4. HOW IT WORKS SECTION
+```
+🚀 BAGAIMANA CARA KERJA REFIXY.ID
+```
+
+**Step-by-Step Process (3 Steps):**
+
+#### Step 1: Upload & Organize
+```
+📤 UPLOAD DOKUMEN
+Upload dokumen Anda ke Refixy.id. Sistem otomatis
+mendeteksi tipe file dan mengorganisir dengan smart tagging.
+```
+
+#### Step 2: Collaborate & Edit
+```
+✏️ KOLABORASI & EDIT
+Undang tim Anda untuk berkolaborasi. Setiap perubahan
+tersimpan otomatis sebagai versi baru.
+```
+
+#### Step 3: Review & Approve
+```
+✅ REVIEW & APPROVE
+Proses approval workflow yang efisien. Track status
+setiap dokumen dari draft hingga final.
+```
+
+### 5. BENEFITS SECTION
+```
+💡 MANFAAT MENGGUNAKAN REFIXY.ID
+```
+
+**Benefits Grid:**
+
+#### Untuk Tim
+```
+👨‍💼 TIM PRODUCTIVITY
+- 60% lebih cepat dalam review dokumen
+- Kolaborasi tanpa batas geografis
+- Workflow approval yang streamlined
+```
+
+#### Untuk Manager
+```
+👔 MANAGEMENT INSIGHTS
+- Real-time visibility ke progress tim
+- Analytics lengkap aktivitas dokumen
+- Risk mitigation dengan audit trails
+```
+
+#### Untuk Developer
+```
+👨‍💻 API INTEGRATION
+- RESTful API untuk custom integration
+- Webhook support untuk automation
+- SDK untuk berbagai bahasa pemrograman
+```
+
+### 6. SOCIAL PROOF SECTION
+```
+🌟 MEREKA YANG SUDAH TERTARIK
+```
+
+**Testimonials & Stats:**
+```
+"Refixy.id mengubah cara kami mengelola dokumen. Sekarang
+semua lebih terorganisir dan efisien." - Sarah, Product Manager
+
+"Version control yang powerful dengan interface yang intuitif.
+Tim kami sangat terbantu." - Ahmad, Tech Lead
+
+📊 STATISTIK MENARIK:
+- 500+ Email di Waitlist
+- 95% Tingkat Kepuasan Beta Tester
+- 3x Lebih Cepat dalam Approval Process
+- 80% Pengurangan Lost Document Cases
+```
+
+### 7. PRICING PREVIEW
+```
+💰 HARGA TERJANGKAU
+```
+
+**Pricing Structure:**
+```
+FREE PLAN
+- 100 Dokumen
+- 5GB Storage
+- 3 Team Members
+- Basic Versioning
+
+PRO PLAN - Rp 99.000/bulan
+- Unlimited Dokumen
+- 100GB Storage
+- Unlimited Team Members
+- Advanced Features
+- Priority Support
+
+ENTERPRISE - Custom Pricing
+- Everything in Pro
+- Custom Integrations
+- Dedicated Support
+- SLA Guarantee
+- On-premise Option
+```
+
+### 8. WAITLIST FORM SECTION
+```
+🎫 BERGABUNG WAITLIST - DAPATKAN AKSES BETA GRATIS!
+```
+
+**Waitlist Form:**
+```
+Dapatkan akses eksklusif ke versi beta Refixy.id sebelum
+launch resmi. Jadilah yang pertama mencoba fitur terbaru!
+
+[Full Name Input]
+[Email Input] *
+[Company/Organization Input]
+[Role/Position Input]
+[How did you hear about us? Dropdown]
+
+[Join Waitlist Button - Large, Prominent]
+
+✅ Dengan join waitlist, Anda akan mendapat:
+- Akses beta gratis selama 6 bulan
+- Prioritas support dari tim developer
+- Input langsung ke roadmap product
+- Early bird discount untuk launch
+```
+
+### 9. FAQ SECTION
+```
+❓ PERTANYA YANG SERING DIAjukan
+```
+
+**FAQ Items:**
+```
+Q: Apakah Refixy.id aman untuk dokumen sensitif?
+A: Ya, kami menggunakan enkripsi end-to-end dan sesuai dengan
+standar keamanan internasional.
+
+Q: Bisakah saya menggunakan Refixy.id offline?
+A: Ya, versi desktop tersedia untuk offline usage dengan
+sync otomatis saat online.
+
+Q: Apakah ada batasan ukuran file?
+A: File hingga 2GB per dokumen, unlimited untuk storage plan.
+
+Q: Bagaimana cara migrasi dari tools lain?
+A: Kami menyediakan migration tools untuk Google Drive,
+Dropbox, OneDrive, dan sistem lainnya.
+```
+
+### 10. FOOTER
+```
+📞 CONTACT & SOCIAL MEDIA
+
+About Refixy.id | Privacy Policy | Terms of Service | Contact Us
+
+[Social Media Icons: Twitter, LinkedIn, GitHub, Discord]
+
+© 2024 Refixy.id - Made with ❤️ for productive teams
+
+[Small Waitlist Form - Newsletter Signup]
+```
+
+---
+
+## 🎨 DESIGN SPECIFICATIONS
+
+### Color Scheme
+```
+Primary: #2563eb (Blue-600)
+Secondary: #64748b (Slate-500)
+Accent: #f59e0b (Amber-500)
+Success: #10b981 (Emerald-500)
+Warning: #f59e0b (Amber-500)
+Error: #ef4444 (Red-500)
+
+Background: #ffffff (White)
+Surface: #f8fafc (Slate-50)
+Text Primary: #0f172a (Slate-900)
+Text Secondary: #64748b (Slate-500)
+```
+
+### Typography
+```
+Heading Font: Inter (Sans-serif)
+Body Font: Inter (Sans-serif)
+
+H1: 48px, Bold, Line-height: 1.2
+H2: 36px, Bold, Line-height: 1.3
+H3: 24px, Bold, Line-height: 1.4
+Body Large: 18px, Regular, Line-height: 1.6
+Body: 16px, Regular, Line-height: 1.6
+Body Small: 14px, Regular, Line-height: 1.5
+```
+
+### Icons & Illustrations
+```
+- Lucide React icons untuk UI elements
+- Custom illustrations untuk hero dan feature sections
+- Consistent iconography throughout
+- SVG format untuk scalability
+```
+
+---
+
+## 📱 RESPONSIVE DESIGN
+
+### Desktop (1200px+)
+- 4-column grid untuk features
+- Side-by-side layout untuk hero
+- Full-width sections
+
+### Tablet (768px - 1199px)
+- 2-column grid untuk features
+- Stacked layout dengan adjusted spacing
+- Optimized touch targets
+
+### Mobile (320px - 767px)
+- Single column layout
+- Vertical stacking
+- Mobile-optimized forms
+- Hamburger menu navigation
+
+---
+
+## 🔧 TECHNICAL REQUIREMENTS
+
+### Frontend Stack
+```
+- Next.js 15 (App Router)
+- React 18
+- TypeScript
+- Tailwind CSS
+- Shadcn/ui components
+- Lucide React icons
+```
+
+### Key Features Implementation
+```
+- Email collection form dengan validation
+- Waitlist counter (real-time update)
+- Social proof testimonials
+- Interactive feature showcase
+- Responsive navigation
+- SEO optimized
+- Fast loading (under 3 seconds)
+```
+
+### Analytics & Tracking
+```
+- Google Analytics 4
+- Conversion tracking untuk waitlist signups
+- Heatmap analysis
+- A/B testing capability
+```
+
+---
+
+## 📈 MARKETING STRATEGY
+
+### Target Audience
+```
+- Startup teams (5-50 orang)
+- Product development companies
+- Design agencies
+- Consulting firms
+- Remote-first companies
+- Tech-savvy SMBs
+```
+
+### Value Proposition
+```
+"Refixy.id - The missing piece in your document workflow"
+"Version control for documents, made simple and powerful"
+"Never lose a document version again"
+```
+
+### Launch Strategy
+```
+Phase 1: Landing Page + Waitlist (Current)
+Phase 2: Beta Launch (100 users)
+Phase 3: Public Launch
+Phase 4: Enterprise Features
+```
+
+---
+
+## 📋 SUCCESS METRICS
+
+### Primary Goals
+```
+- 1000+ emails in waitlist dalam 3 bulan
+- 80% conversion dari visitor ke signup
+- 50% beta users menjadi paying customers
+```
+
+### Secondary Goals
+```
+- High engagement (avg session 3+ minutes)
+- Low bounce rate (<30%)
+- High social shares
+- Positive feedback dari beta users
+```
+
+---
+
+## 🛠️ DEVELOPMENT ROADMAP
+
+### Week 1-2: Design & Setup
+```
+- Wireframes & mockups
+- Brand identity development
+- Component library setup
+- Basic landing page structure
+```
+
+### Week 3-4: Core Features
+```
+- Hero section with waitlist form
+- Features showcase
+- Responsive design implementation
+- Form validation & submission
+```
+
+### Week 5-6: Polish & Launch
+```
+- Content optimization
+- Performance optimization
+- Analytics integration
+- Beta launch preparation
+```
+
+---
+
+## 💡 INNOVATION FEATURES
+
+### Coming Soon Features (Teaser)
+```
+🚀 AI-Powered Document Insights
+🤖 Smart Document Categorization
+📱 Mobile App (iOS & Android)
+🎯 Workflow Automation
+🔍 Advanced Search & Filtering
+📊 Real-time Analytics Dashboard
+🌐 Multi-language Support
+```
+
+---
+
+*Dokumen spesifikasi ini dibuat untuk memandu development landing page Refixy.id. Semua elemen dirancang untuk meningkatkan conversion rate dan membangun excitement untuk product launch.*

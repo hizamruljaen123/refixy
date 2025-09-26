@@ -28,6 +28,7 @@ model User {
   audit_logs       AuditLog[]
   comments         Comment[]
   notifications    Notification[]
+  revision_requests DocumentRevisionRequest[]
 
   @@map("users")
 }
@@ -121,6 +122,7 @@ model Document {
   acls              DocumentACL[]
   timeline_events   DocumentTimeline[]
   comments          Comment[]
+  revision_requests DocumentRevisionRequest[]
 
   @@map("documents")
 }
@@ -147,6 +149,7 @@ model DocumentVersion {
   current_document Document?      @relation("DocumentCurrentVersion")
   timeline_events DocumentTimeline[]
   comments        Comment[]
+  revision_requests DocumentRevisionRequest[]
 
   @@map("document_versions")
 }
@@ -216,6 +219,46 @@ model DocumentTimeline {
   actor    User             @relation(fields: [actor_user_id], references: [id])
 
   @@map("document_timeline")
+}
+
+model DocumentRevisionRequest {
+  id                String   @id @default(cuid())
+  document_id       String
+  version_id        String
+  requester_user_id String
+  title             String?
+  notes             String
+  requirements      String?
+  status            RevisionRequestStatus @default(PROGRESS)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  document  Document       @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  version   DocumentVersion @relation(fields: [version_id], references: [id], onDelete: Cascade)
+  requester User           @relation(fields: [requester_user_id], references: [id])
+  attachments DocumentRevisionAttachment[]
+
+  @@index([document_id])
+  @@index([version_id])
+  @@map("document_revision_requests")
+}
+
+model DocumentRevisionAttachment {
+  id                   String   @id @default(cuid())
+  revision_request_id  String
+  file_url             String
+  file_path            String?
+  file_name            String?
+  file_mime            String?
+  file_size            Int?
+  image_width          Int?
+  image_height         Int?
+  created_at           DateTime @default(now())
+
+  revision_request DocumentRevisionRequest @relation(fields: [revision_request_id], references: [id], onDelete: Cascade)
+
+  @@index([revision_request_id])
+  @@map("document_revision_attachments")
 }
 
 model AuditLog {
@@ -291,6 +334,13 @@ enum DocumentStatus {
 enum VersionChangeType {
   MAJOR
   MINOR
+}
+
+enum RevisionRequestStatus {
+  DONE
+  POSTPONE
+  PROGRESS
+  DENIED
 }
 
 enum ACLSubjectType {

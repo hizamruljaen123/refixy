@@ -12,9 +12,57 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { FileText, Download, Eye, Edit, MessageSquare, Clock, Upload, ArrowLeft, User, Calendar } from "lucide-react"
+import { FileText, Download, Eye, Edit, MessageSquare, Clock, Upload, ArrowLeft, User, Calendar, Paperclip, Image as ImageIcon, X } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import AppLayout from "@/components/layouts/app-layout"
+
+type RevisionStatus = 'DONE' | 'POSTPONE' | 'PROGRESS' | 'DENIED'
+
+const REVISION_STATUS_CONFIG: Record<RevisionStatus, { label: string; badgeClass: string }> = {
+  DONE: {
+    label: 'Done',
+    badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  },
+  POSTPONE: {
+    label: 'Postpone',
+    badgeClass: 'bg-amber-100 text-amber-700 border-amber-200'
+  },
+  PROGRESS: {
+    label: 'In Progress',
+    badgeClass: 'bg-sky-100 text-sky-700 border-sky-200'
+  },
+  DENIED: {
+    label: 'Denied',
+    badgeClass: 'bg-rose-100 text-rose-700 border-rose-200'
+  }
+}
+
+interface RevisionAttachment {
+  id: string
+  file_url: string
+  file_path?: string
+  file_name?: string
+  file_mime?: string
+  file_size?: number
+  image_width?: number
+  image_height?: number
+  created_at: string
+}
+
+interface RevisionRequest {
+  id: string
+  title?: string
+  notes: string
+  requirements?: string
+  created_at: string
+  status: RevisionStatus
+  requester: {
+    id: string
+    full_name: string
+  }
+  attachments: RevisionAttachment[]
+}
 
 interface Document {
   id: string
@@ -61,6 +109,7 @@ interface Document {
     created_by: {
       full_name: string
     }
+    revision_requests?: RevisionRequest[]
   }>
   tags?: Array<{ id: string; name: string }>
 }
@@ -111,20 +160,15 @@ export default function DocumentDetailPage() {
   })
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/signin")
-    }
-  }, [status, router])
-
-  useEffect(() => {
-    if (session && documentId) {
-      fetchDocument()
-      fetchTimeline()
-      fetchComments()
-    }
-  }, [session, documentId])
+  const [activeRevisionVersion, setActiveRevisionVersion] = useState<string | null>(null)
+  const [revisionForm, setRevisionForm] = useState({
+    title: "",
+    notes: "",
+    requirements: "",
+    attachments: [] as File[]
+  })
+  const [isSubmittingRevision, setIsSubmittingRevision] = useState(false)
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null)
 
   const fetchDocument = async () => {
     try {
@@ -145,6 +189,20 @@ export default function DocumentDetailPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/auth/signin")
+    }
+  }, [status, router])
+
+  useEffect(() => {
+    if (session && documentId) {
+      fetchDocument()
+      fetchTimeline()
+      fetchComments()
+    }
+  }, [session, documentId])
 
   const fetchTimeline = async () => {
     try {
@@ -326,6 +384,134 @@ export default function DocumentDetailPage() {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const formatDateLabel = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('id-ID', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  const resetRevisionForm = () => {
+    setRevisionForm({
+      title: "",
+      notes: "",
+      requirements: "",
+      attachments: []
+    })
+  }
+
+  const handleRevisionDialogToggle = (versionId: string, open: boolean) => {
+    if (open) {
+      setActiveRevisionVersion(versionId)
+      resetRevisionForm()
+    } else {
+      setActiveRevisionVersion(prev => (prev === versionId ? null : prev))
+      resetRevisionForm()
+    }
+  }
+
+  const handleRevisionFileChange = (files: FileList | null) => {
+    if (!files) return
+    setRevisionForm(prev => {
+      const existing = prev.attachments
+      const incoming = Array.from(files)
+      const merged = [...existing, ...incoming]
+      const unique = merged.filter((file, index, self) =>
+        self.findIndex(other =>
+          other.name === file.name &&
+          other.lastModified === file.lastModified &&
+          other.size === file.size
+        ) === index
+      )
+      return {
+        ...prev,
+        attachments: unique.slice(0, 5)
+      }
+    })
+  }
+
+  const handleRemoveRevisionAttachment = (index: number) => {
+    setRevisionForm(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter((_, i) => i !== index)
+    }))
+  }
+
+  const handleRevisionSubmit = async () => {
+    if (!activeRevisionVersion) return
+    if (!revisionForm.notes.trim()) {
+      toast.error("Catatan revisi wajib diisi")
+      return
+    }
+
+    setIsSubmittingRevision(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('notes', revisionForm.notes.trim())
+      if (revisionForm.title.trim()) {
+        formData.append('title', revisionForm.title.trim())
+      }
+      if (revisionForm.requirements.trim()) {
+        formData.append('requirements', revisionForm.requirements.trim())
+      }
+      revisionForm.attachments.forEach(file => {
+        formData.append('attachments', file)
+      })
+
+      const response = await fetch(`/api/documents/${documentId}/versions/${activeRevisionVersion}/revision-requests`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (response.ok) {
+        toast.success("Revision request submitted")
+        resetRevisionForm()
+        setActiveRevisionVersion(null)
+        await fetchDocument()
+      } else {
+        let message = 'Failed to submit revision request'
+        try {
+          const error = await response.json()
+          if (error?.error) message = error.error
+        } catch (err) {
+          console.error('Failed to parse revision request error', err)
+        }
+        toast.error(message)
+      }
+    } catch (error) {
+      console.error('Error submitting revision request:', error)
+      toast.error('Failed to submit revision request')
+    } finally {
+      setIsSubmittingRevision(false)
+    }
+  }
+
+  const handleStatusChange = async (versionId: string, requestId: string, status: RevisionStatus) => {
+    setUpdatingStatusId(requestId)
+    try {
+      const response = await fetch(`/api/documents/${documentId}/versions/${versionId}/revision-requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null)
+        throw new Error(error?.error || 'Failed to update status')
+      }
+
+      await fetchDocument()
+      toast.success('Revision status updated')
+    } catch (err) {
+      console.error('Failed to update revision status:', err)
+      toast.error(err instanceof Error ? err.message : 'Failed to update status')
+    } finally {
+      setUpdatingStatusId(null)
+    }
   }
 
   if (status === "loading" || loading) {
@@ -752,76 +938,311 @@ export default function DocumentDetailPage() {
               </CardHeader>
               <CardContent>
                 {document.versions && document.versions.length > 0 ? (
-                  <div className="space-y-4">
-                    {document.versions.map((version, index) => (
-                      <div key={version.id} className="border rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center w-10 h-10 bg-primary/10 rounded-full">
-                              <FileText className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-lg">{version.version_label}</h4>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <Badge variant={version.change_type === 'MAJOR' ? 'default' : 'secondary'}>
-                                  {version.change_type}
-                                </Badge>
-                                <span>•</span>
-                                <span>{formatFileSize(version.file_size)}</span>
-                                {version.file_mime && (
-                                  <>
-                                    <span>•</span>
-                                    <span>{version.file_mime}</span>
-                                  </>
-                                )}
+                  <div className="relative pl-6">
+                    <div className="absolute left-[11px] top-1 bottom-1 w-px bg-border" aria-hidden />
+                    <div className="space-y-6">
+                      {document.versions.map((version, index) => (
+                        <div key={version.id} className="relative pb-6 last:pb-0">
+                          <div className="absolute left-[-3px] top-1 flex h-4 w-4 items-center justify-center">
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full border-2 ${
+                                index === 0
+                                  ? 'border-primary bg-primary'
+                                  : 'border-muted-foreground/40 bg-background'
+                              }`}
+                            />
+                          </div>
+
+                          <div className="inline-flex items-center gap-2 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                            <Calendar className="h-3 w-3" />
+                            <span>{formatDateLabel(version.created_at)}</span>
+                          </div>
+
+                          <div className="mt-3 rounded-lg border bg-card p-4 shadow-sm">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                              <div className="flex items-start gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                                  <FileText className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h4 className="text-lg font-semibold">v{version.version_label}</h4>
+                                    <Badge variant={version.change_type === 'MAJOR' ? 'default' : 'secondary'}>
+                                      {version.change_type}
+                                    </Badge>
+                                    <Badge variant="outline">{formatFileSize(version.file_size)}</Badge>
+                                    {version.file_mime && (
+                                      <Badge variant="outline">{version.file_mime}</Badge>
+                                    )}
+                                  </div>
+                                  <div className="mt-2 flex flex-wrap gap-4 text-sm text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <User className="h-3.5 w-3.5" />
+                                      {version.created_by?.full_name || 'Unknown User'}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3.5 w-3.5" />
+                                      {formatDate(version.created_at)}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
+                              {index === 0 && (
+                                <Badge variant="default" className="self-start">
+                                  Current Version
+                                </Badge>
+                              )}
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium">{version.created_by?.full_name || 'Unknown User'}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(version.created_at)}
-                            </p>
+
+                            {version.change_log && (
+                              <div className="mt-4">
+                                <h5 className="text-sm font-medium mb-1">Change Description</h5>
+                                <p className="text-sm text-muted-foreground rounded-md bg-muted/60 p-3">
+                                  {version.change_log}
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  handlePreview(
+                                    version.id,
+                                    `${document.title}_v${version.version_label}`,
+                                    version.file_mime || 'application/octet-stream',
+                                    version.file_path
+                                  )
+                                }
+                                title="Open file in new tab"
+                              >
+                                <Eye className="mr-1 h-3 w-3" />
+                                View
+                              </Button>
+                              <Button variant="outline" size="sm">
+                                <Download className="mr-1 h-3 w-3" />
+                                Download
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRevisionDialogToggle(version.id, true)}
+                              >
+                                <Edit className="mr-1 h-3 w-3" />
+                                Request Revision
+                              </Button>
+                            </div>
+
+                            <div className="mt-6 space-y-4">
+                              <div className="space-y-1">
+                                <h5 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Revision Requests</h5>
+                                <p className="text-xs text-muted-foreground">Kumpulkan catatan revisi dan lampirkan gambar pendukung.</p>
+                              </div>
+
+                              {version.revision_requests && version.revision_requests.length > 0 ? (
+                                <div className="space-y-3">
+                                  {version.revision_requests.map((request) => (
+                                    <div key={request.id} className="rounded-md border bg-muted/40 p-4">
+                                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                        <div>
+                                          <p className="text-sm font-semibold">{request.title || 'Revision Request'}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {request.requester?.full_name || 'Unknown User'} • {formatDate(request.created_at)}
+                                          </p>
+                                        </div>
+                                        <div className="flex flex-col items-start gap-2 md:items-end">
+                                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${REVISION_STATUS_CONFIG[request.status].badgeClass}`}>
+                                            {REVISION_STATUS_CONFIG[request.status].label}
+                                          </span>
+                                          {(session?.user?.permissions?.includes('DOC_WRITE') || session?.user?.permissions?.includes('DOC_REVIEW') || session?.user?.roles?.includes('ADMIN')) && (
+                                            <Select
+                                              value={request.status}
+                                              onValueChange={(value) => handleStatusChange(version.id, request.id, value as RevisionStatus)}
+                                              disabled={updatingStatusId === request.id}
+                                            >
+                                              <SelectTrigger size="sm" className="min-w-[150px]">
+                                                <SelectValue placeholder="Update status" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="PROGRESS">In Progress</SelectItem>
+                                                <SelectItem value="DONE">Done</SelectItem>
+                                                <SelectItem value="POSTPONE">Postpone</SelectItem>
+                                                <SelectItem value="DENIED">Denied</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="mt-3 space-y-3 text-sm">
+                                        <div>
+                                          <p className="font-medium">Catatan</p>
+                                          <p className="text-muted-foreground whitespace-pre-line">{request.notes}</p>
+                                        </div>
+                                        {request.requirements && (
+                                          <div>
+                                            <p className="font-medium">Kebutuhan</p>
+                                            <p className="text-muted-foreground whitespace-pre-line">{request.requirements}</p>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {request.attachments && request.attachments.length > 0 && (
+                                        <div className="mt-4">
+                                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lampiran</p>
+                                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                            {request.attachments.map((attachment) => (
+                                              <a
+                                                key={attachment.id}
+                                                href={attachment.file_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-3 rounded-md border bg-background p-3 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                                              >
+                                                <span className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary">
+                                                  <ImageIcon className="h-5 w-5" />
+                                                </span>
+                                                <span className="truncate">{attachment.file_name || 'attachment.jpg'}</span>
+                                              </a>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">Belum ada permintaan revisi untuk versi ini.</p>
+                              )}
+                            </div>
+
+                            <Dialog
+                              open={activeRevisionVersion === version.id}
+                              onOpenChange={(open) => handleRevisionDialogToggle(version.id, open)}
+                            >
+                              <DialogContent className="max-w-2xl">
+                                <DialogHeader>
+                                  <DialogTitle>Request Revision - v{version.version_label}</DialogTitle>
+                                  <DialogDescription>
+                                    Sampaikan catatan revisi dan lampirkan gambar pendukung. Gambar akan dikompresi otomatis sebelum diunggah.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`revision-title-${version.id}`}>Judul (opsional)</Label>
+                                      <Input
+                                        id={`revision-title-${version.id}`}
+                                        placeholder="Contoh: Perbaiki diagram bab 2"
+                                        value={revisionForm.title}
+                                        onChange={(e) => setRevisionForm(prev => ({ ...prev, title: e.target.value }))}
+                                        disabled={isSubmittingRevision}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label htmlFor={`revision-requirements-${version.id}`}>Kebutuhan (opsional)</Label>
+                                      <Textarea
+                                        id={`revision-requirements-${version.id}`}
+                                        placeholder="Daftar kebutuhan atau referensi tambahan"
+                                        value={revisionForm.requirements}
+                                        onChange={(e) => setRevisionForm(prev => ({ ...prev, requirements: e.target.value }))}
+                                        rows={3}
+                                        disabled={isSubmittingRevision}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`revision-notes-${version.id}`}>Catatan Revisi *</Label>
+                                    <Textarea
+                                      id={`revision-notes-${version.id}`}
+                                      placeholder="Jelaskan perubahan atau perbaikan yang diharapkan"
+                                      value={revisionForm.notes}
+                                      onChange={(e) => setRevisionForm(prev => ({ ...prev, notes: e.target.value }))}
+                                      rows={5}
+                                      disabled={isSubmittingRevision}
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label htmlFor={`revision-attachments-${version.id}`}>Lampiran Gambar (maks. 5)</Label>
+                                    <div className="rounded-md border border-dashed p-4 text-center">
+                                      <input
+                                        id={`revision-attachments-${version.id}`}
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        onChange={(e) => handleRevisionFileChange(e.target.files)}
+                                        disabled={isSubmittingRevision}
+                                        className="hidden"
+                                      />
+                                      <label htmlFor={`revision-attachments-${version.id}`} className="flex cursor-pointer flex-col items-center gap-2 text-sm text-muted-foreground">
+                                        <Paperclip className="h-5 w-5" />
+                                        <span>Klik untuk memilih gambar (JPEG/PNG/WebP)</span>
+                                      </label>
+                                      <p className="mt-2 text-xs text-muted-foreground">Gambar akan dikompresi otomatis sebelum disimpan.</p>
+                                    </div>
+                                    {revisionForm.attachments.length > 0 && (
+                                      <div className="space-y-2">
+                                        {revisionForm.attachments.map((file, index) => (
+                                          <div key={`${file.name}-${index}`} className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                                            <div className="flex items-center gap-2">
+                                              <Paperclip className="h-4 w-4" />
+                                              <div>
+                                                <p className="font-medium">{file.name}</p>
+                                                <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                                              </div>
+                                            </div>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon"
+                                              onClick={() => handleRemoveRevisionAttachment(index)}
+                                              disabled={isSubmittingRevision}
+                                            >
+                                              <X className="h-4 w-4" />
+                                              <span className="sr-only">Remove attachment</span>
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <DialogFooter>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => handleRevisionDialogToggle(version.id, false)}
+                                    disabled={isSubmittingRevision}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    onClick={handleRevisionSubmit}
+                                    disabled={isSubmittingRevision || !revisionForm.notes.trim()}
+                                  >
+                                    {isSubmittingRevision ? (
+                                      <>
+                                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                                        Mengirim...
+                                      </>
+                                    ) : (
+                                      'Submit Request'
+                                    )}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         </div>
-
-                        {version.change_log && (
-                          <div className="mb-3">
-                            <h5 className="text-sm font-medium mb-1">Change Description</h5>
-                            <p className="text-sm text-muted-foreground bg-gray-50 p-2 rounded">
-                              {version.change_log}
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-2 pt-2 border-t">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handlePreview(version.id, `${document.title}_v${version.version_label}`, version.file_mime || 'application/octet-stream', version.file_path)}
-                            title="Open file in new tab"
-                          >
-                            <Eye className="h-3 w-3 mr-1" />
-                            View
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Download className="h-3 w-3 mr-1" />
-                            Download
-                          </Button>
-                          {index === 0 && (
-                            <Badge variant="default" className="ml-auto">
-                              Current Version
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                  <div className="py-8 text-center">
+                    <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400" />
                     <p className="text-muted-foreground">No version history available</p>
-                    <p className="text-sm text-muted-foreground mt-2">
+                    <p className="mt-2 text-sm text-muted-foreground">
                       Version history will appear here once files are uploaded
                     </p>
                   </div>
